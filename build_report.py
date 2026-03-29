@@ -1,0 +1,2115 @@
+#!/usr/bin/env python3
+"""
+build_report.py — Generate interactive HTML skill inspector report.
+
+Usage:
+    python3 build_report.py --input skills_graph.json --output skill-inspector.html
+    cat skills_graph.json | python3 build_report.py --output skill-inspector.html
+"""
+
+import argparse
+import json
+import sys
+import os
+from datetime import datetime
+
+HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill Inspector</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a26;
+    --bg-hover: #22222e;
+    --border: #2a2a3a;
+    --border-active: #3a3a5a;
+    --text-primary: #e8e8f0;
+    --text-secondary: #8888a0;
+    --text-muted: #555570;
+    --cyan: #00F0FF;
+    --purple: #B026FF;
+    --green: #00E87B;
+    --red: #FF3366;
+    --orange: #FF8C42;
+    --yellow: #FFD700;
+    --blue: #4A9EFF;
+    --pink: #FF6EC7;
+    /* Node type colors */
+    --color-planner: #4A9EFF;
+    --color-executor: #00E87B;
+    --color-router: #FFD700;
+    --color-fork: #B026FF;
+    --color-join: #B026FF;
+    --color-tool: #00F0FF;
+    --color-gate: #FF8C42;
+    --color-spawn: #FF6EC7;
+    --color-file_io: #8888a0;
+    --color-validator: #FF3366;
+    --color-template: #555570;
+  }
+
+  [data-theme="light"] {
+    --bg-primary: #f5f5f8;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #eeeef2;
+    --bg-hover: #e4e4ea;
+    --border: #d0d0da;
+    --border-active: #b0b0c0;
+    --text-primary: #1a1a2e;
+    --text-secondary: #555570;
+    --text-muted: #8888a0;
+    --cyan: #0099aa;
+    --purple: #8b1acc;
+    --green: #00a858;
+    --red: #cc2244;
+    --orange: #cc6e30;
+    --yellow: #b89b00;
+    --blue: #2a7ae0;
+    --pink: #cc4e9e;
+    --color-planner: #2a7ae0;
+    --color-executor: #00a858;
+    --color-router: #b89b00;
+    --color-fork: #8b1acc;
+    --color-join: #8b1acc;
+    --color-tool: #0099aa;
+    --color-gate: #cc6e30;
+    --color-spawn: #cc4e9e;
+    --color-file_io: #666680;
+    --color-validator: #cc2244;
+    --color-template: #8888a0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: auto;
+    line-height: 1;
+  }
+  .theme-toggle:hover { color: var(--text-primary); border-color: var(--cyan); }
+
+  .sidebar-header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--cyan);
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sidebar-header .mode-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: var(--purple);
+    color: white;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .sidebar-header .meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .skill-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .skill-item {
+    padding: 14px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 4px;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+  }
+
+  .skill-item:hover { background: var(--bg-hover); }
+
+  .skill-item.active {
+    background: var(--bg-tertiary);
+    border-color: var(--cyan);
+  }
+
+  .skill-item .skill-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .skill-item .skill-path {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .skill-item .skill-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .score-excellent { background: rgba(0,232,123,0.15); color: var(--green); }
+  .score-good { background: rgba(74,158,255,0.15); color: var(--blue); }
+  .score-needs-work { background: rgba(255,140,66,0.15); color: var(--orange); }
+  .score-poor { background: rgba(255,51,102,0.15); color: var(--red); }
+
+  .pattern-tag {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Main area */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toolbar {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--bg-secondary);
+  }
+
+  .toolbar .skill-title {
+    font-size: 18px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .toolbar .skill-path {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    font-family: monospace;
+    word-break: break-all;
+  }
+
+  .legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  /* Graph canvas */
+  .graph-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .graph-svg {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+  }
+
+  .graph-svg:active { cursor: grabbing; }
+
+  .graph-svg .node-group { cursor: pointer; }
+
+  .graph-svg .node-rect {
+    rx: 12;
+    ry: 12;
+    stroke-width: 2;
+    transition: filter 0.2s ease, stroke-width 0.2s ease;
+  }
+
+  .graph-svg .node-group:hover .node-rect {
+    filter: brightness(1.15) drop-shadow(0 0 12px rgba(0,240,255,0.25));
+    stroke-width: 2.5;
+  }
+
+  .graph-svg .node-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    fill: var(--text-primary);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  .graph-svg .node-desc {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    fill: var(--text-secondary);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  .graph-svg .node-type-badge {
+    rx: 4;
+    ry: 4;
+  }
+
+  .graph-svg .node-type-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    fill: var(--bg-primary);
+  }
+
+  .graph-svg .node-warning-dot {
+    fill: var(--orange);
+    stroke: var(--bg-primary);
+    stroke-width: 2;
+  }
+
+  .graph-svg .edge-path {
+    fill: none;
+    stroke: var(--border-active);
+    stroke-width: 2;
+  }
+
+  .graph-svg .edge-path.sequential { stroke: #6a6a8a; }
+  .graph-svg .edge-path.parallel { stroke: var(--purple); stroke-dasharray: 8 4; }
+  .graph-svg .edge-path.conditional { stroke: var(--yellow); stroke-dasharray: 4 4; }
+  .graph-svg .edge-path.chain { stroke: var(--pink); stroke-width: 2.5; stroke-dasharray: 10 4; }
+  .graph-svg .edge-path.data_pass { stroke: var(--cyan); stroke-dasharray: 2 4; opacity: 0.5; }
+
+  .graph-svg .edge-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    fill: var(--text-muted);
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+
+  .graph-svg .edge-label-bg {
+    fill: var(--bg-primary);
+    rx: 3;
+    ry: 3;
+  }
+
+  .graph-svg .edge-arrow {
+    fill: #6a6a8a;
+  }
+
+  .graph-svg .edge-arrow.parallel { fill: var(--purple); }
+  .graph-svg .edge-arrow.conditional { fill: var(--yellow); }
+  .graph-svg .edge-arrow.chain { fill: var(--pink); }
+  .graph-svg .edge-arrow.data_pass { fill: var(--cyan); opacity: 0.5; }
+
+  /* Simulation edge states */
+  .graph-svg .edge-path.sim-traversed {
+    stroke: var(--cyan) !important;
+    stroke-width: 3 !important;
+    stroke-dasharray: 8 4 !important;
+    animation: edgeFlow 0.6s linear infinite;
+    opacity: 1 !important;
+  }
+  .graph-svg .edge-path.sim-done {
+    opacity: 0.3;
+  }
+  .graph-svg .edge-path.sim-future {
+    opacity: 0.15;
+  }
+  @keyframes edgeFlow {
+    to { stroke-dashoffset: -12; }
+  }
+
+  /* Detail panel */
+  .detail-panel {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: 380px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-y: auto;
+    display: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 20;
+  }
+
+  .detail-panel.visible { display: flex; flex-direction: column; }
+
+  .detail-panel.fullscreen {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    border-radius: 0;
+    z-index: 100;
+  }
+
+  .detail-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    z-index: 1;
+  }
+
+  .detail-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .detail-header .type-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .detail-header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .detail-close, .detail-fullscreen {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+  }
+  .detail-close:hover, .detail-fullscreen:hover { color: var(--text-primary); }
+
+  .detail-body {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .detail-body .detail-section { flex-shrink: 0; }
+  .detail-body .detail-section:last-child { flex: 1; display: flex; flex-direction: column; }
+  .detail-body .detail-section:last-child .instruction-text,
+  .detail-body .detail-section:last-child .io-list,
+  .detail-body .detail-section:last-child #detailWarningsList,
+  .detail-body .detail-section:last-child #detailPatchesList {
+    flex: 1;
+  }
+
+  .detail-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-section:last-child { border-bottom: none; }
+
+  .detail-section h4 {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .detail-section .instruction-text {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-primary);
+    padding: 10px 12px;
+    border-radius: 4px;
+    min-height: 100px;
+    overflow-y: auto;
+  }
+
+  .detail-section .io-list {
+    list-style: none;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .detail-section .io-list li {
+    padding: 3px 0;
+    color: var(--text-secondary);
+  }
+
+  .detail-section .io-list li::before {
+    content: '→ ';
+    color: var(--cyan);
+  }
+
+  .detail-section .warning-item {
+    padding: 8px 10px;
+    background: rgba(255,140,66,0.08);
+    border-left: 3px solid var(--orange);
+    border-radius: 0 4px 4px 0;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--orange);
+    line-height: 1.4;
+  }
+
+  .detail-section .warning-item.error {
+    background: rgba(255,51,102,0.08);
+    border-left-color: var(--red);
+    color: var(--red);
+  }
+
+  /* Quality panel at bottom of sidebar */
+  .quality-panel {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    width: 380px;
+    max-height: 240px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    z-index: 30;
+  }
+
+  .quality-panel h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .quality-minimize-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 6px;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .quality-minimize-btn:hover { color: var(--text-primary); border-color: var(--cyan); }
+  .quality-panel.minimized {
+    max-height: 36px;
+    overflow: hidden;
+    padding: 8px 12px;
+  }
+  .quality-panel.minimized h3 { margin-bottom: 0; }
+  .quality-panel.minimized #qualityIssues { display: none; }
+
+  .quality-issue {
+    font-size: 11px;
+    padding: 6px 0;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    line-height: 1.4;
+  }
+
+  .quality-issue:last-child { border-bottom: none; }
+
+  .quality-issue .severity {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 6px;
+  }
+
+  .severity-error { color: var(--red); }
+  .severity-warning { color: var(--orange); }
+  .severity-info { color: var(--text-muted); }
+
+  /* Simulation states */
+  .graph-svg .node-group.sim-active .node-rect {
+    filter: brightness(1.3) drop-shadow(0 0 16px rgba(0,240,255,0.4));
+    stroke-width: 3;
+  }
+
+  .graph-svg .node-group.sim-visited .node-rect {
+    opacity: 0.45;
+  }
+  .graph-svg .node-group.sim-visited .node-label,
+  .graph-svg .node-group.sim-visited .node-desc,
+  .graph-svg .node-group.sim-visited .node-type-label {
+    opacity: 0.45;
+  }
+
+  .graph-svg .node-group.sim-unvisited .node-rect {
+    opacity: 0.7;
+  }
+
+  .sim-toolbar {
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-tertiary);
+  }
+
+  .sim-toolbar.visible { display: flex; }
+
+  .sim-toolbar .sim-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--cyan);
+    font-weight: 600;
+    margin-right: 6px;
+  }
+
+  .sim-btn {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+
+  .sim-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--cyan);
+  }
+
+  .sim-btn.active {
+    background: rgba(0,240,255,0.15);
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+
+  .sim-status {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    margin-left: auto;
+  }
+
+  .branch-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--cyan);
+    border-radius: 8px;
+    padding: 16px;
+    display: none;
+    z-index: 10;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    min-width: 200px;
+  }
+
+  .branch-overlay.visible { display: block; }
+
+  .branch-overlay h4 {
+    font-size: 12px;
+    color: var(--cyan);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .branch-option {
+    padding: 10px 14px;
+    margin-bottom: 6px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .branch-option:hover {
+    border-color: var(--cyan);
+    background: var(--bg-hover);
+  }
+
+  .branch-option:last-child { margin-bottom: 0; }
+
+  .patch-item {
+    padding: 10px 12px;
+    background: rgba(0,240,255,0.05);
+    border-left: 3px solid var(--cyan);
+    border-radius: 0 6px 6px 0;
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .patch-item:last-child { margin-bottom: 0; }
+
+  .patch-item .patch-location {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 4px;
+  }
+
+  .patch-item .patch-issue {
+    color: var(--orange);
+    margin-bottom: 6px;
+  }
+
+  .patch-item .patch-fix {
+    color: var(--green);
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-primary);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  /* Minimap */
+  .minimap {
+    position: absolute;
+    bottom: 60px;
+    left: 16px;
+    width: 180px;
+    height: 120px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: crosshair;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+
+  .minimap canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Zoom controls */
+  .zoom-controls {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .zoom-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .zoom-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--cyan);
+  }
+
+  .speed-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    height: 36px;
+  }
+  .speed-group label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+  .speed-group input[type="range"] {
+    width: 60px;
+    height: 4px;
+    accent-color: var(--cyan);
+    cursor: pointer;
+  }
+  .speed-group .speed-val {
+    font-size: 10px;
+    color: var(--text-secondary);
+    min-width: 20px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 14px;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .empty-state .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-active); }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h1>
+      ◆ SKILL INSPECTOR
+      <span class="mode-badge" id="modeBadge">standard</span>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" id="themeBtn">☀</button>
+    </h1>
+    <div class="meta" id="reportMeta"></div>
+  </div>
+  <div class="skill-list" id="skillList"></div>
+</div>
+
+<div class="main">
+  <div class="toolbar" id="toolbar" style="display:none">
+    <div><div class="skill-title" id="skillTitle"></div><div class="skill-path" id="skillPath"></div></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-planner)"></div>Planner</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-executor)"></div>Executor</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-router)"></div>Router</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-fork)"></div>Fork/Join</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-tool)"></div>Tool</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-gate)"></div>Gate</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-spawn)"></div>Spawn</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--color-validator)"></div>Validator</div>
+    </div>
+  </div>
+  <div class="sim-toolbar" id="simToolbar">
+    <span class="sim-label">Simulation</span>
+    <button class="sim-btn" id="simPlayBtn" onclick="simTogglePlay()" title="Play/Pause">&#9654;</button>
+    <button class="sim-btn" onclick="simStep()" title="Step">&#9197;</button>
+    <button class="sim-btn" onclick="simReset()" title="Reset">&#8634;</button>
+    <span class="sim-status" id="simStatus"></span>
+  </div>
+  <div class="graph-container" id="graphContainer">
+    <div class="branch-overlay" id="branchOverlay">
+      <h4>Select Branch</h4>
+      <div id="branchOptions"></div>
+    </div>
+    <div class="empty-state" id="emptyState">
+      <span>Select a skill to inspect</span>
+      <span class="hint">Click a skill in the sidebar to view its instruction DAG</span>
+    </div>
+    <svg class="graph-svg" id="graphSvg" style="display:none"></svg>
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-header">
+        <div>
+          <h3 id="detailTitle"></h3>
+          <span class="type-badge" id="detailType"></span>
+        </div>
+        <div class="detail-header-actions">
+          <button class="detail-fullscreen" onclick="toggleDetailFullscreen()" title="Fullscreen">⛶</button>
+          <button class="detail-close" onclick="closeDetail()">×</button>
+        </div>
+      </div>
+      <div class="detail-body">
+      <div class="detail-section" id="detailInstruction">
+        <h4>Raw Instruction</h4>
+        <div class="instruction-text" id="detailInstructionText"></div>
+      </div>
+      <div class="detail-section" id="detailInputs" style="display:none">
+        <h4>Inputs</h4>
+        <ul class="io-list" id="detailInputsList"></ul>
+      </div>
+      <div class="detail-section" id="detailOutputs" style="display:none">
+        <h4>Outputs</h4>
+        <ul class="io-list" id="detailOutputsList"></ul>
+      </div>
+      <div class="detail-section" id="detailWarnings" style="display:none">
+        <h4>Warnings</h4>
+        <div id="detailWarningsList"></div>
+      </div>
+      <div class="detail-section" id="detailPatches" style="display:none">
+        <h4>Suggested Fixes</h4>
+        <div id="detailPatchesList"></div>
+      </div>
+      </div><!-- /detail-body -->
+    </div>
+    <div class="quality-panel" id="qualityPanel" style="display:none">
+      <h3><span id="qualityTitle">Quality Issues</span><button class="quality-minimize-btn" onclick="toggleQualityMinimize()" title="Minimize">−</button></h3>
+      <div id="qualityIssues"></div>
+    </div>
+    <div class="minimap" id="minimap">
+      <canvas id="minimapCanvas" width="360" height="240"></canvas>
+    </div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn()">+</button>
+      <button class="zoom-btn" onclick="zoomOut()">−</button>
+      <button class="zoom-btn" onclick="zoomFit()">⊡</button>
+      <div class="speed-group">
+        <label>Pan</label>
+        <input type="range" id="panSpeed" min="1" max="10" value="3" oninput="document.getElementById('panVal').textContent=this.value+'x'">
+        <span class="speed-val" id="panVal">3x</span>
+      </div>
+      <div class="speed-group">
+        <label>Zoom</label>
+        <input type="range" id="zoomSpeed" min="1" max="10" value="3" oninput="document.getElementById('zoomVal').textContent=this.value+'x'">
+        <span class="speed-val" id="zoomVal">3x</span>
+      </div>
+      <button class="zoom-btn" onclick="resetSpeedControls()" title="Reset speeds">↺</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== DATA (injected by build_report.py) =====
+const SKILLS_DATA = %%SKILLS_DATA%%;
+
+// ===== DAGRE LAYOUT ENGINE (minimal implementation) =====
+// Self-contained layout — no CDN dependency
+class DagreLayout {
+  constructor(nodes, edges, opts = {}) {
+    this.nodes = nodes.map(n => ({...n, width: opts.nodeWidth || 180, height: opts.nodeHeight || 56}));
+    this.edges = edges;
+    this.rankSep = opts.rankSep || 80;
+    this.nodeSep = opts.nodeSep || 40;
+    this.marginX = opts.marginX || 60;
+    this.marginY = opts.marginY || 40;
+  }
+
+  layout() {
+    const nodeMap = new Map(this.nodes.map(n => [n.id, n]));
+    const inDegree = new Map(this.nodes.map(n => [n.id, 0]));
+    const outEdges = new Map(this.nodes.map(n => [n.id, []]));
+
+    this.edges.forEach(e => {
+      inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+      outEdges.get(e.source)?.push(e.target);
+    });
+
+    // Assign ranks via topological sort (BFS)
+    const ranks = new Map();
+    const queue = [];
+    this.nodes.forEach(n => {
+      if ((inDegree.get(n.id) || 0) === 0) {
+        queue.push(n.id);
+        ranks.set(n.id, 0);
+      }
+    });
+
+    // Handle cycles: if no root found, use first node
+    if (queue.length === 0 && this.nodes.length > 0) {
+      queue.push(this.nodes[0].id);
+      ranks.set(this.nodes[0].id, 0);
+    }
+
+    let maxRank = 0;
+    while (queue.length > 0) {
+      const nid = queue.shift();
+      const rank = ranks.get(nid);
+      maxRank = Math.max(maxRank, rank);
+      (outEdges.get(nid) || []).forEach(tid => {
+        const newRank = rank + 1;
+        if (!ranks.has(tid) || ranks.get(tid) < newRank) {
+          ranks.set(tid, newRank);
+        }
+        const deg = inDegree.get(tid) - 1;
+        inDegree.set(tid, deg);
+        if (deg <= 0 && !queue.includes(tid)) {
+          queue.push(tid);
+        }
+      });
+    }
+
+    // Assign positions for unranked nodes
+    this.nodes.forEach(n => {
+      if (!ranks.has(n.id)) ranks.set(n.id, maxRank + 1);
+    });
+
+    // Group by rank
+    const rankGroups = new Map();
+    this.nodes.forEach(n => {
+      const r = ranks.get(n.id);
+      if (!rankGroups.has(r)) rankGroups.set(r, []);
+      rankGroups.get(r).push(n);
+    });
+
+    // Position nodes
+    const sortedRanks = [...rankGroups.keys()].sort((a,b) => a - b);
+    let totalHeight = 0;
+
+    sortedRanks.forEach((rank, ri) => {
+      const group = rankGroups.get(rank);
+      const groupWidth = group.reduce((sum, n) => sum + n.width, 0) + (group.length - 1) * this.nodeSep;
+      let x = -groupWidth / 2;
+
+      group.forEach(n => {
+        n.x = x + n.width / 2;
+        n.y = ri * (n.height + this.rankSep);
+        x += n.width + this.nodeSep;
+      });
+
+      totalHeight = Math.max(totalHeight, ri * (group[0].height + this.rankSep) + group[0].height);
+    });
+
+    // Compute edge paths
+    this.edges.forEach(e => {
+      const src = nodeMap.get(e.source);
+      const tgt = nodeMap.get(e.target);
+      if (src && tgt) {
+        e.points = [
+          {x: src.x, y: src.y + src.height / 2},
+          {x: (src.x + tgt.x) / 2, y: (src.y + src.height/2 + tgt.y - tgt.height/2) / 2},
+          {x: tgt.x, y: tgt.y - tgt.height / 2}
+        ];
+      }
+    });
+
+    // Compute bounding box
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    this.nodes.forEach(n => {
+      minX = Math.min(minX, n.x - n.width/2);
+      maxX = Math.max(maxX, n.x + n.width/2);
+      minY = Math.min(minY, n.y - n.height/2);
+      maxY = Math.max(maxY, n.y + n.height/2);
+    });
+
+    return {
+      nodes: this.nodes,
+      edges: this.edges,
+      width: maxX - minX + this.marginX * 2,
+      height: maxY - minY + this.marginY * 2,
+      offsetX: -minX + this.marginX,
+      offsetY: -minY + this.marginY
+    };
+  }
+}
+
+// ===== STATE =====
+let currentSkillIndex = -1;
+let transform = { x: 0, y: 0, scale: 1 };
+let originalViewBox = { w: 800, h: 600 };
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+
+// ===== INIT =====
+function init() {
+  document.getElementById('modeBadge').textContent = SKILLS_DATA.mode || 'standard';
+  document.getElementById('reportMeta').textContent =
+    `${SKILLS_DATA.skills.length} skills · ${SKILLS_DATA.generated_at || 'unknown'}`;
+
+  const list = document.getElementById('skillList');
+  SKILLS_DATA.skills.forEach((skill, i) => {
+    const item = document.createElement('div');
+    item.className = 'skill-item';
+    item.onclick = () => selectSkill(i);
+
+    const score = skill.quality?.score || 0;
+    const scoreClass = score >= 9 ? 'excellent' : score >= 7 ? 'good' : score >= 5 ? 'needs-work' : 'poor';
+
+    item.innerHTML = `
+      <div class="skill-name">${esc(skill.name)}</div>
+      <div class="skill-path">${esc(skill.path || '')}</div>
+      <div class="skill-meta">
+        <span class="score-badge score-${scoreClass}">${score.toFixed(1)}</span>
+        <span class="pattern-tag">${esc(skill.pattern || 'unknown')}</span>
+        <span>${skill.nodes?.length || 0} nodes</span>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function selectSkill(index) {
+  currentSkillIndex = index;
+  const skill = SKILLS_DATA.skills[index];
+
+  // Update sidebar active state
+  document.querySelectorAll('.skill-item').forEach((el, i) => {
+    el.classList.toggle('active', i === index);
+  });
+
+  // Show toolbar
+  document.getElementById('toolbar').style.display = 'flex';
+  document.getElementById('skillTitle').textContent = skill.name;
+  document.getElementById('skillPath').textContent = skill.path || '';
+
+  // Show quality issues
+  const qp = document.getElementById('qualityPanel');
+  const qi = document.getElementById('qualityIssues');
+  qi.innerHTML = '';
+
+  if (skill.quality?.top_issues?.length) {
+    qp.style.display = 'block';
+    skill.quality.top_issues.forEach(issue => {
+      const div = document.createElement('div');
+      div.className = 'quality-issue';
+      div.innerHTML = `<span class="severity severity-warning">!</span> ${esc(issue)}`;
+      qi.appendChild(div);
+    });
+  } else {
+    // Collect warnings from nodes
+    const allWarnings = [];
+    (skill.nodes || []).forEach(n => {
+      (n.warnings || []).forEach(w => allWarnings.push(w));
+    });
+    if (allWarnings.length > 0) {
+      qp.style.display = 'block';
+      allWarnings.slice(0, 8).forEach(w => {
+        const div = document.createElement('div');
+        div.className = 'quality-issue';
+        div.innerHTML = `<span class="severity severity-warning">!</span> ${esc(w)}`;
+        qi.appendChild(div);
+      });
+    } else {
+      qp.style.display = 'none';
+    }
+  }
+
+  // Update detail panel bottom to respect quality panel
+  requestAnimationFrame(updateDetailPanelBottom);
+
+  // Render graph
+  renderGraph(skill);
+  closeDetail();
+
+  // Init simulation
+  simInit(skill);
+
+  // Compute patches
+  computePatches();
+}
+
+function renderGraph(skill) {
+  const svg = document.getElementById('graphSvg');
+  const empty = document.getElementById('emptyState');
+  svg.style.display = 'block';
+  empty.style.display = 'none';
+
+  const nodes = (skill.nodes || []).map(n => ({...n}));
+  const edges = (skill.edges || []).map(e => ({...e}));
+
+  if (nodes.length === 0) {
+    svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="#555570" font-family="Space Grotesk" font-size="14">No nodes parsed for this skill</text>`;
+    return;
+  }
+
+  const layout = new DagreLayout(nodes, edges, {
+    nodeWidth: 220,
+    nodeHeight: 80,
+    rankSep: 100,
+    nodeSep: 60
+  }).layout();
+
+  // Build SVG
+  const w = layout.width;
+  const h = layout.height;
+
+  let svgContent = `<defs>
+    <marker id="arrowDefault" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" class="edge-arrow"/>
+    </marker>
+    <marker id="arrowParallel" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" class="edge-arrow parallel"/>
+    </marker>
+    <marker id="arrowConditional" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" class="edge-arrow conditional"/>
+    </marker>
+    <marker id="arrowChain" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" class="edge-arrow chain"/>
+    </marker>
+    <marker id="arrowDataPass" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" class="edge-arrow data_pass"/>
+    </marker>
+  </defs>`;
+
+  svgContent += `<g id="graphGroup" transform="translate(${layout.offsetX}, ${layout.offsetY})">`;
+
+  // Edges
+  layout.edges.forEach(e => {
+    if (!e.points || e.points.length < 2) return;
+    const p = e.points;
+    const markerType = e.type === 'parallel' ? 'Parallel' :
+                       e.type === 'conditional' ? 'Conditional' :
+                       e.type === 'chain' ? 'Chain' :
+                       e.type === 'data_pass' ? 'DataPass' : 'Default';
+    const pathD = `M${p[0].x},${p[0].y} Q${p[1].x},${p[1].y} ${p[2].x},${p[2].y}`;
+    svgContent += `<path d="${pathD}" class="edge-path ${e.type || ''}" data-source="${e.source}" data-target="${e.target}" marker-end="url(#arrow${markerType})"/>`;
+
+    if (e.label) {
+      const mx = p[1].x;
+      const my = p[1].y - 8;
+      const labelW = e.label.length * 5.5 + 10;
+      svgContent += `<rect class="edge-label-bg" x="${mx - labelW/2}" y="${my - 7}" width="${labelW}" height="14"/>`;
+      svgContent += `<text x="${mx}" y="${my}" class="edge-label">${esc(e.label)}</text>`;
+    }
+  });
+
+  // Nodes — card style with description and type badge
+  layout.nodes.forEach(n => {
+    const nx = n.x - n.width/2;
+    const ny = n.y - n.height/2;
+    const color = `var(--color-${n.type || 'executor'})`;
+    const hasWarnings = n.warnings && n.warnings.length > 0;
+    const desc = truncate(n.raw_instruction || '', 40);
+    const typeLabel = (n.type || 'executor').toUpperCase();
+    const badgeW = typeLabel.length * 6.5 + 12;
+
+    svgContent += `<g class="node-group" data-id="${esc(n.id)}" onclick="showDetail('${esc(n.id)}')">`;
+    // Card background
+    svgContent += `<rect class="node-rect" x="${nx}" y="${ny}" width="${n.width}" height="${n.height}" fill="var(--bg-tertiary)" stroke="${color}"/>`;
+    // Type badge (pill at top)
+    svgContent += `<rect class="node-type-badge" x="${n.x - badgeW/2}" y="${ny + 6}" width="${badgeW}" height="16" fill="${color}"/>`;
+    svgContent += `<text class="node-type-label" x="${n.x}" y="${ny + 14}">${esc(typeLabel)}</text>`;
+    // Node label
+    svgContent += `<text class="node-label" x="${n.x}" y="${ny + 36}">${esc(truncate(n.label, 24))}</text>`;
+    // Description snippet
+    if (desc) {
+      svgContent += `<text class="node-desc" x="${n.x}" y="${ny + 52}">${esc(desc)}</text>`;
+    }
+    // Warning indicator
+    if (hasWarnings) {
+      svgContent += `<circle class="node-warning-dot" cx="${nx + n.width - 8}" cy="${ny + 8}" r="5"/>`;
+    }
+    svgContent += `</g>`;
+  });
+
+  svgContent += `</g>`;
+
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  originalViewBox = { w, h };
+  svg.innerHTML = svgContent;
+
+  // Store node positions for sim auto-pan
+  layoutNodePositions = {};
+  layout.nodes.forEach(n => {
+    layoutNodePositions[n.id] = { x: n.x + layout.offsetX, y: n.y + layout.offsetY, width: n.width, height: n.height };
+  });
+
+  // Reset transform
+  transform = { x: 0, y: 0, scale: 1 };
+  updateTransform();
+
+  // Render minimap
+  minimapRender(layout);
+
+  // Setup pan/zoom
+  setupInteraction(svg, w, h);
+}
+
+function showDetail(nodeId) {
+  const skill = SKILLS_DATA.skills[currentSkillIndex];
+  const node = skill.nodes.find(n => n.id === nodeId);
+  if (!node) return;
+
+  const panel = document.getElementById('detailPanel');
+  panel.classList.add('visible');
+  updateDetailPanelBottom();
+
+  document.getElementById('detailTitle').textContent = node.label;
+  const typeBadge = document.getElementById('detailType');
+  typeBadge.textContent = node.type;
+  typeBadge.style.background = `var(--color-${node.type})`;
+  typeBadge.style.color = 'var(--bg-primary)';
+
+  document.getElementById('detailInstructionText').textContent = node.raw_instruction || '(no instruction text captured)';
+
+  const inputsDiv = document.getElementById('detailInputs');
+  const inputsList = document.getElementById('detailInputsList');
+  if (node.inputs && node.inputs.length > 0) {
+    inputsDiv.style.display = 'block';
+    inputsList.innerHTML = node.inputs.map(i => `<li>${esc(i)}</li>`).join('');
+  } else {
+    inputsDiv.style.display = 'none';
+  }
+
+  const outputsDiv = document.getElementById('detailOutputs');
+  const outputsList = document.getElementById('detailOutputsList');
+  if (node.outputs && node.outputs.length > 0) {
+    outputsDiv.style.display = 'block';
+    outputsList.innerHTML = node.outputs.map(o => `<li>${esc(o)}</li>`).join('');
+  } else {
+    outputsDiv.style.display = 'none';
+  }
+
+  const warningsDiv = document.getElementById('detailWarnings');
+  const warningsList = document.getElementById('detailWarningsList');
+  if (node.warnings && node.warnings.length > 0) {
+    warningsDiv.style.display = 'block';
+    warningsList.innerHTML = node.warnings.map(w =>
+      `<div class="warning-item">${esc(w)}</div>`
+    ).join('');
+  } else {
+    warningsDiv.style.display = 'none';
+  }
+
+  // Show structural patches for this node
+  const patchesDiv = document.getElementById('detailPatches');
+  const patchesList = document.getElementById('detailPatchesList');
+  const nodePatches = currentPatches.filter(p => p.nodeId === nodeId);
+  if (nodePatches.length > 0) {
+    patchesDiv.style.display = 'block';
+    patchesList.innerHTML = nodePatches.map(p =>
+      `<div class="patch-item">
+        <div class="patch-location">${esc(p.location)}</div>
+        <div class="patch-issue">${esc(p.message)}</div>
+        <div class="patch-fix">${esc(p.suggestion)}</div>
+      </div>`
+    ).join('');
+  } else {
+    patchesDiv.style.display = 'none';
+  }
+}
+
+function closeDetail() {
+  const panel = document.getElementById('detailPanel');
+  panel.classList.remove('visible', 'fullscreen');
+}
+
+function toggleDetailFullscreen() {
+  const panel = document.getElementById('detailPanel');
+  const btn = panel.querySelector('.detail-fullscreen');
+  const isFs = panel.classList.toggle('fullscreen');
+  btn.textContent = isFs ? '⊡' : '⛶';
+  btn.title = isFs ? 'Exit fullscreen' : 'Fullscreen';
+}
+
+function toggleQualityMinimize() {
+  const qp = document.getElementById('qualityPanel');
+  const btn = qp.querySelector('.quality-minimize-btn');
+  const title = document.getElementById('qualityTitle');
+  const isMin = qp.classList.toggle('minimized');
+  btn.textContent = isMin ? '+' : '−';
+  if (isMin) {
+    const count = qp.querySelectorAll('.quality-issue').length;
+    title.textContent = `Quality Issues (${count})`;
+  } else {
+    title.textContent = 'Quality Issues';
+  }
+  requestAnimationFrame(updateDetailPanelBottom);
+}
+
+function updateDetailPanelBottom() {
+  const dp = document.getElementById('detailPanel');
+  const qp = document.getElementById('qualityPanel');
+  if (!dp) return;
+  if (qp && qp.style.display !== 'none') {
+    const qpHeight = qp.offsetHeight;
+    dp.style.bottom = (qpHeight + 24) + 'px';
+  } else {
+    dp.style.bottom = '16px';
+  }
+}
+
+// ===== PAN & ZOOM =====
+function getPanSpeed() { return parseInt(document.getElementById('panSpeed')?.value || '3'); }
+function getZoomSpeed() { return parseInt(document.getElementById('zoomSpeed')?.value || '3'); }
+
+function resetSpeedControls() {
+  const ps = document.getElementById('panSpeed');
+  const zs = document.getElementById('zoomSpeed');
+  if (ps) { ps.value = 3; document.getElementById('panVal').textContent = '3x'; }
+  if (zs) { zs.value = 3; document.getElementById('zoomVal').textContent = '3x'; }
+}
+
+function setupInteraction(svg, w, h) {
+  svg.onmousedown = (e) => {
+    if (e.target.closest('.node-group')) return;
+    isDragging = true;
+    dragStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+  };
+  svg.onmousemove = (e) => {
+    if (!isDragging) return;
+    const speed = getPanSpeed();
+    const rawX = e.clientX - dragStart.x;
+    const rawY = e.clientY - dragStart.y;
+    transform.x += (rawX - transform.x) * speed * 0.5;
+    transform.y += (rawY - transform.y) * speed * 0.5;
+    dragStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+    updateTransform();
+  };
+  svg.onmouseup = () => isDragging = false;
+  svg.onmouseleave = () => isDragging = false;
+  svg.onwheel = (e) => {
+    e.preventDefault();
+    const speed = getZoomSpeed();
+    const base = e.deltaY > 0 ? -0.03 : 0.03;
+    const factor = 1 + base * speed;
+    transform.scale = Math.max(0.02, Math.min(50, transform.scale * factor));
+    updateTransform();
+  };
+}
+
+function updateTransform() {
+  const g = document.getElementById('graphGroup');
+  if (!g) return;
+  const svg = document.getElementById('graphSvg');
+  const w = originalViewBox.w;
+  const h = originalViewBox.h;
+  const newW = w / transform.scale;
+  const newH = h / transform.scale;
+  const cx = w / 2;
+  const cy = h / 2;
+  svg.setAttribute('viewBox',
+    `${cx - newW/2 - transform.x/transform.scale} ${cy - newH/2 - transform.y/transform.scale} ${newW} ${newH}`
+  );
+  minimapUpdateViewport();
+}
+
+function zoomIn() {
+  const speed = getZoomSpeed();
+  transform.scale = Math.min(50, transform.scale * (1 + 0.06 * speed));
+  updateTransform();
+}
+function zoomOut() {
+  const speed = getZoomSpeed();
+  transform.scale = Math.max(0.02, transform.scale / (1 + 0.06 * speed));
+  updateTransform();
+}
+function zoomFit() {
+  transform = { x: 0, y: 0, scale: 1 };
+  const svg = document.getElementById('graphSvg');
+  const skill = SKILLS_DATA.skills[currentSkillIndex];
+  if (skill) renderGraph(skill);
+}
+
+// ===== SIMULATION AUTO-PAN =====
+function smoothPanToActiveNodes(activeIds) {
+  if (!activeIds || activeIds.length === 0) return;
+  const positions = activeIds.map(id => layoutNodePositions[id]).filter(Boolean);
+  if (positions.length === 0) return;
+
+  const avgX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+  const avgY = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+
+  const w = originalViewBox.w;
+  const h = originalViewBox.h;
+  const cx = w / 2;
+  const cy = h / 2;
+
+  const targetScale = transform.scale;
+
+  const targetX = (cx - avgX) * targetScale;
+  const targetY = (cy - avgY) * targetScale;
+
+  const dx = Math.abs(targetX - transform.x) / targetScale;
+  const dy = Math.abs(targetY - transform.y) / targetScale;
+  if (dx < 30 && dy < 30) return;
+
+  if (simAnimFrame) cancelAnimationFrame(simAnimFrame);
+  const startTransform = { x: transform.x, y: transform.y, scale: transform.scale };
+  const startTime = performance.now();
+  const duration = 600;
+
+  function animate(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    const ease = 1 - Math.pow(1 - t, 3);
+    transform.x = startTransform.x + (targetX - startTransform.x) * ease;
+    transform.y = startTransform.y + (targetY - startTransform.y) * ease;
+    transform.scale = startTransform.scale + (targetScale - startTransform.scale) * ease;
+    updateTransform();
+    if (t < 1) simAnimFrame = requestAnimationFrame(animate);
+  }
+  simAnimFrame = requestAnimationFrame(animate);
+}
+
+// ===== THEME =====
+function toggleTheme() {
+  const body = document.body;
+  const btn = document.getElementById('themeBtn');
+  if (body.getAttribute('data-theme') === 'light') {
+    body.removeAttribute('data-theme');
+    btn.textContent = '☀';
+    btn.title = 'Switch to light mode';
+  } else {
+    body.setAttribute('data-theme', 'light');
+    btn.textContent = '☾';
+    btn.title = 'Switch to dark mode';
+  }
+}
+
+// ===== UTILS =====
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function truncate(s, len) {
+  if (!s) return '';
+  return s.length > len ? s.slice(0, len - 1) + '…' : s;
+}
+
+// ===== MINIMAP =====
+let minimapLayout = null;
+
+const NODE_COLORS = {
+  planner: '#4A9EFF', executor: '#00E87B', router: '#FFD700',
+  fork: '#B026FF', join: '#B026FF', tool: '#00F0FF',
+  gate: '#FF8C42', spawn: '#FF6EC7', file_io: '#8888a0',
+  validator: '#FF3366', template: '#555570',
+};
+
+function minimapRender(layoutResult) {
+  minimapLayout = layoutResult;
+  const canvas = document.getElementById('minimapCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const cw = canvas.width;
+  const ch = canvas.height;
+  const gw = layoutResult.width;
+  const gh = layoutResult.height;
+  const scale = Math.min(cw / gw, ch / gh) * 0.9;
+  const ox = (cw - gw * scale) / 2;
+  const oy = (ch - gh * scale) / 2;
+
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#12121a';
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.strokeStyle = '#2a2a3a';
+  ctx.lineWidth = 1;
+  layoutResult.edges.forEach(e => {
+    if (!e.points || e.points.length < 2) return;
+    ctx.beginPath();
+    const p0 = e.points[0];
+    const p2 = e.points[2] || e.points[1];
+    ctx.moveTo(ox + (p0.x + layoutResult.offsetX) * scale, oy + (p0.y + layoutResult.offsetY) * scale);
+    ctx.lineTo(ox + (p2.x + layoutResult.offsetX) * scale, oy + (p2.y + layoutResult.offsetY) * scale);
+    ctx.stroke();
+  });
+
+  layoutResult.nodes.forEach(n => {
+    const nx = ox + (n.x - n.width/2 + layoutResult.offsetX) * scale;
+    const ny = oy + (n.y - n.height/2 + layoutResult.offsetY) * scale;
+    const nw = n.width * scale;
+    const nh = n.height * scale;
+    ctx.fillStyle = NODE_COLORS[n.type] || '#555570';
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(nx, ny, nw, nh);
+    ctx.globalAlpha = 1.0;
+  });
+
+  minimapUpdateViewport();
+}
+
+function minimapUpdateViewport() {
+  if (!minimapLayout) return;
+  const canvas = document.getElementById('minimapCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const cw = canvas.width;
+  const ch = canvas.height;
+  const gw = minimapLayout.width;
+  const gh = minimapLayout.height;
+  const mScale = Math.min(cw / gw, ch / gh) * 0.9;
+  const ox = (cw - gw * mScale) / 2;
+  const oy = (ch - gh * mScale) / 2;
+
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.fillStyle = '#12121a';
+  ctx.fillRect(0, 0, cw, ch);
+
+  ctx.strokeStyle = '#2a2a3a';
+  ctx.lineWidth = 1;
+  minimapLayout.edges.forEach(e => {
+    if (!e.points || e.points.length < 2) return;
+    ctx.beginPath();
+    const p0 = e.points[0];
+    const p2 = e.points[2] || e.points[1];
+    ctx.moveTo(ox + (p0.x + minimapLayout.offsetX) * mScale, oy + (p0.y + minimapLayout.offsetY) * mScale);
+    ctx.lineTo(ox + (p2.x + minimapLayout.offsetX) * mScale, oy + (p2.y + minimapLayout.offsetY) * mScale);
+    ctx.stroke();
+  });
+
+  minimapLayout.nodes.forEach(n => {
+    const nx = ox + (n.x - n.width/2 + minimapLayout.offsetX) * mScale;
+    const ny = oy + (n.y - n.height/2 + minimapLayout.offsetY) * mScale;
+    const nw = n.width * mScale;
+    const nh = n.height * mScale;
+    ctx.fillStyle = NODE_COLORS[n.type] || '#555570';
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(nx, ny, nw, nh);
+    ctx.globalAlpha = 1.0;
+  });
+
+  const w = originalViewBox.w;
+  const h = originalViewBox.h;
+  const vw = w / transform.scale;
+  const vh = h / transform.scale;
+  const vx = w/2 - vw/2 - transform.x/transform.scale;
+  const vy = h/2 - vh/2 - transform.y/transform.scale;
+
+  const rx = ox + vx * mScale;
+  const ry = oy + vy * mScale;
+  const rw = vw * mScale;
+  const rh = vh * mScale;
+
+  ctx.strokeStyle = '#00F0FF';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(rx, ry, rw, rh);
+  ctx.fillStyle = 'rgba(0, 240, 255, 0.08)';
+  ctx.fillRect(rx, ry, rw, rh);
+}
+
+(function() {
+  const canvas = document.getElementById('minimapCanvas');
+  if (!canvas) return;
+  let dragging = false;
+
+  function handleMinimapNav(e) {
+    if (!minimapLayout) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+    const gw = minimapLayout.width;
+    const gh = minimapLayout.height;
+    const mScale = Math.min(cw / gw, ch / gh) * 0.9;
+    const ox = (cw - gw * mScale) / 2;
+    const oy = (ch - gh * mScale) / 2;
+
+    const graphX = (mx - ox) / mScale;
+    const graphY = (my - oy) / mScale;
+
+    const w = originalViewBox.w;
+    const h = originalViewBox.h;
+    transform.x = (w/2 - graphX) * transform.scale;
+    transform.y = (h/2 - graphY) * transform.scale;
+    updateTransform();
+  }
+
+  canvas.addEventListener('mousedown', (e) => { dragging = true; handleMinimapNav(e); });
+  canvas.addEventListener('mousemove', (e) => { if (dragging) handleMinimapNav(e); });
+  canvas.addEventListener('mouseup', () => dragging = false);
+  canvas.addEventListener('mouseleave', () => dragging = false);
+})();
+
+// ===== SIMULATION ENGINE =====
+class SimulationEngine {
+  constructor(nodes, edges) {
+    this._nodes = nodes;
+    this._edges = edges;
+    this._active = [];
+    this._visited = [];
+    this._waitingForSelection = false;
+    this._branchOptions = [];
+    this._complete = false;
+  }
+
+  _findEntryNode() {
+    const targets = new Set(this._edges.map(e => e.target));
+    for (const n of this._nodes) {
+      if (!targets.has(n.id)) return n.id;
+    }
+    return this._nodes.length ? this._nodes[0].id : null;
+  }
+
+  _getNodeType(id) {
+    const n = this._nodes.find(n => n.id === id);
+    return n ? (n.type || '') : '';
+  }
+
+  _outgoing(id) { return this._edges.filter(e => e.source === id); }
+  _incoming(id) { return this._edges.filter(e => e.target === id); }
+
+  _isDecisionNode(id) {
+    const t = this._getNodeType(id);
+    if (t === 'router' || t === 'gate') return true;
+    return this._outgoing(id).some(e => e.type === 'conditional');
+  }
+
+  _isFork(id) { return this._getNodeType(id) === 'fork'; }
+  _isJoin(id) { return this._getNodeType(id) === 'join'; }
+
+  _activateNodes(ids) {
+    this._active = ids;
+    if (ids.length === 1 && this._isDecisionNode(ids[0])) {
+      const out = this._outgoing(ids[0]);
+      this._waitingForSelection = true;
+      this._branchOptions = out.map(e => ({ target: e.target, label: e.label || '' }));
+    }
+  }
+
+  start() {
+    this._complete = false;
+    this._visited = [];
+    this._waitingForSelection = false;
+    this._branchOptions = [];
+    const entry = this._findEntryNode();
+    if (entry) this._activateNodes([entry]);
+    else this._active = [];
+  }
+
+  step() {
+    if (this._complete || !this._active.length || this._waitingForSelection) return;
+
+    const nodeId = this._active[0];
+    const remaining = this._active.slice(1);
+    const out = this._outgoing(nodeId);
+
+    if (!out.length) {
+      if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+      if (!remaining.length) { this._complete = true; this._active = []; }
+      else this._active = remaining;
+      return;
+    }
+
+    if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+
+    let successors = [];
+    if (this._isFork(nodeId)) {
+      out.forEach(e => { if (!successors.includes(e.target)) successors.push(e.target); });
+    } else {
+      out.forEach(e => {
+        if (this._isJoin(e.target)) {
+          const inc = this._incoming(e.target);
+          if (inc.every(ie => this._visited.includes(ie.source)) && !successors.includes(e.target)) {
+            successors.push(e.target);
+          }
+        } else {
+          if (!successors.includes(e.target)) successors.push(e.target);
+        }
+      });
+    }
+
+    const newActive = successors.concat(remaining);
+    if (!newActive.length) { this._complete = true; this._active = []; }
+    else this._activateNodes(newActive);
+  }
+
+  selectBranch(index) {
+    if (!this._waitingForSelection || index >= this._branchOptions.length) return;
+    const chosen = this._branchOptions[index];
+    const current = this._active[0];
+    if (current && !this._visited.includes(current)) this._visited.push(current);
+    this._active = [chosen.target];
+    this._waitingForSelection = false;
+    this._branchOptions = [];
+  }
+
+  reset() {
+    this._active = [];
+    this._visited = [];
+    this._waitingForSelection = false;
+    this._branchOptions = [];
+    this._complete = false;
+  }
+
+  isComplete() { return this._complete; }
+
+  getState() {
+    return {
+      active: [...this._active],
+      visited: [...this._visited],
+      waitingForSelection: this._waitingForSelection,
+      branchOptions: [...this._branchOptions],
+    };
+  }
+}
+
+// ===== SIMULATION UI =====
+let simEngine = null;
+let layoutNodePositions = {};
+let simAnimFrame = null;
+let simPlaying = false;
+let simInterval = null;
+
+function simInit(skill) {
+  if (simEngine) simStop();
+  const nodes = (skill.nodes || []).map(n => ({...n}));
+  const edges = (skill.edges || []).map(e => ({...e}));
+  simEngine = new SimulationEngine(nodes, edges);
+  document.getElementById('simToolbar').classList.add('visible');
+  simUpdateStatus('Ready — press play or step');
+}
+
+function simTogglePlay() {
+  if (!simEngine) return;
+  if (simPlaying) {
+    simStop();
+  } else {
+    simPlaying = true;
+    document.getElementById('simPlayBtn').classList.add('active');
+    document.getElementById('simPlayBtn').innerHTML = '&#9646;&#9646;';
+    if (simEngine.getState().active.length === 0 && !simEngine.isComplete()) {
+      simEngine.start();
+      simApplyState();
+    }
+    simInterval = setInterval(() => {
+      const state = simEngine.getState();
+      if (state.waitingForSelection || simEngine.isComplete()) {
+        simStop();
+        return;
+      }
+      simEngine.step();
+      simApplyState();
+    }, 800);
+  }
+}
+
+function simStop() {
+  simPlaying = false;
+  if (simInterval) { clearInterval(simInterval); simInterval = null; }
+  document.getElementById('simPlayBtn').classList.remove('active');
+  document.getElementById('simPlayBtn').innerHTML = '&#9654;';
+}
+
+function simStep() {
+  if (!simEngine) return;
+  const state = simEngine.getState();
+  if (state.active.length === 0 && !simEngine.isComplete()) {
+    simEngine.start();
+  } else {
+    simEngine.step();
+  }
+  simApplyState();
+}
+
+function simReset() {
+  if (!simEngine) return;
+  simStop();
+  simEngine.reset();
+  simApplyState();
+  simUpdateStatus('Reset — press play or step');
+  document.getElementById('branchOverlay').classList.remove('visible');
+}
+
+function simApplyState() {
+  if (!simEngine) return;
+  const state = simEngine.getState();
+  const allNodeIds = new Set();
+  const skill = SKILLS_DATA.skills[currentSkillIndex];
+  if (skill) (skill.nodes || []).forEach(n => allNodeIds.add(n.id));
+
+  document.querySelectorAll('.node-group').forEach(g => {
+    const id = g.dataset.id;
+    g.classList.remove('sim-active', 'sim-visited', 'sim-unvisited');
+    if (state.active.length === 0 && state.visited.length === 0) return;
+    if (state.active.includes(id)) {
+      g.classList.add('sim-active');
+    } else if (state.visited.includes(id)) {
+      g.classList.add('sim-visited');
+    } else {
+      g.classList.add('sim-unvisited');
+    }
+  });
+
+  // Apply CSS classes to SVG edges
+  const activeSet = new Set(state.active);
+  const visitedSet = new Set(state.visited);
+  const simRunning = state.active.length > 0 || state.visited.length > 0;
+  document.querySelectorAll('.edge-path').forEach(p => {
+    p.classList.remove('sim-traversed', 'sim-done', 'sim-future');
+    if (!simRunning) return;
+    const src = p.dataset.source;
+    const tgt = p.dataset.target;
+    if (visitedSet.has(src) && activeSet.has(tgt)) {
+      p.classList.add('sim-traversed');
+    } else if (visitedSet.has(src) && visitedSet.has(tgt)) {
+      p.classList.add('sim-done');
+    } else {
+      p.classList.add('sim-future');
+    }
+  });
+
+  const overlay = document.getElementById('branchOverlay');
+  if (state.waitingForSelection && state.branchOptions.length > 0) {
+    overlay.classList.add('visible');
+    const opts = document.getElementById('branchOptions');
+    opts.innerHTML = state.branchOptions.map((b, i) =>
+      `<div class="branch-option" onclick="simSelectBranch(${i})">${esc(b.label || b.target)}</div>`
+    ).join('');
+    simUpdateStatus('Waiting for branch selection...');
+  } else {
+    overlay.classList.remove('visible');
+  }
+
+  // Auto-pan to active nodes
+  if (state.active.length > 0) {
+    smoothPanToActiveNodes(state.active);
+  }
+
+  if (simEngine.isComplete()) {
+    simUpdateStatus('Simulation complete');
+  } else if (!state.waitingForSelection) {
+    const activeNames = state.active.join(', ');
+    simUpdateStatus(activeNames ? `Active: ${activeNames}` : 'Ready');
+  }
+}
+
+function simSelectBranch(index) {
+  if (!simEngine) return;
+  simEngine.selectBranch(index);
+  simApplyState();
+}
+
+function simUpdateStatus(msg) {
+  document.getElementById('simStatus').textContent = msg;
+}
+
+// ===== STRUCTURAL PATCH ENGINE =====
+const TERMINAL_TYPES = new Set(['gate', 'spawn', 'exit']);
+
+function suggestPatches(nodes, edges) {
+  const patches = [];
+  patches.push(..._checkOrphans(nodes, edges));
+  patches.push(..._checkDeadEnds(nodes, edges));
+  patches.push(..._checkForkWithoutJoin(nodes, edges));
+  patches.push(..._checkParallelDeps(nodes, edges));
+  return patches;
+}
+
+function _nodeLabel(nodes, id) {
+  const n = nodes.find(n => n.id === id);
+  return n ? (n.label || id) : id;
+}
+function _nodePhase(nodes, id) {
+  const n = nodes.find(n => n.id === id);
+  return n ? (n.phase || '') : '';
+}
+
+function _checkOrphans(nodes, edges) {
+  const targets = new Set(edges.map(e => e.target));
+  const roots = nodes.filter(n => !targets.has(n.id));
+  if (roots.length <= 1) return [];
+  return roots.slice(1).map(n => ({
+    check_id: 'S1', severity: 'error',
+    message: `Node '${n.label || n.id}' has no incoming edge — it will never execute.`,
+    location: n.phase ? `Phase "${n.phase}", node "${n.label}"` : `Node "${n.label}"`,
+    suggestion: `Add a sequential edge from an upstream node to '${n.label}', or move it into an existing parallel group.`,
+    nodeId: n.id
+  }));
+}
+
+function _checkDeadEnds(nodes, edges) {
+  const sources = new Set(edges.map(e => e.source));
+  return nodes.filter(n => !TERMINAL_TYPES.has(n.type || '') && !sources.has(n.id)).map(n => ({
+    check_id: 'S2', severity: 'warning',
+    message: `Node '${n.label || n.id}' has no outgoing edge — execution stops here unexpectedly.`,
+    location: n.phase ? `Phase "${n.phase}", node "${n.label}"` : `Node "${n.label}"`,
+    suggestion: `Add a sequential edge from '${n.label}' to the next step, or change its type to 'gate'/'spawn' if it's an intentional endpoint.`,
+    nodeId: n.id
+  }));
+}
+
+function _checkForkWithoutJoin(nodes, edges) {
+  const forks = nodes.filter(n => n.type === 'fork');
+  const joinIds = new Set(nodes.filter(n => n.type === 'join').map(n => n.id));
+  const adj = {};
+  edges.forEach(e => { (adj[e.source] = adj[e.source] || []).push(e.target); });
+  const patches = [];
+  forks.forEach(f => {
+    const visited = new Set();
+    const queue = [f.id];
+    let found = false;
+    while (queue.length) {
+      const cur = queue.shift();
+      if (visited.has(cur)) continue;
+      visited.add(cur);
+      if (joinIds.has(cur) && cur !== f.id) { found = true; break; }
+      (adj[cur] || []).forEach(t => queue.push(t));
+    }
+    if (!found) {
+      patches.push({
+        check_id: 'S3', severity: 'error',
+        message: `Parallel fork '${f.label}' has no convergence point.`,
+        location: f.phase ? `Phase "${f.phase}", node "${f.label}"` : `Node "${f.label}"`,
+        suggestion: `Add a join node after the parallel branches spawned by '${f.label}' to collect outputs before the next step.`,
+        nodeId: f.id
+      });
+    }
+  });
+  return patches;
+}
+
+function _checkParallelDeps(nodes, edges) {
+  const forkChildren = {};
+  edges.filter(e => e.type === 'parallel').forEach(e => {
+    (forkChildren[e.source] = forkChildren[e.source] || []).push(e.target);
+  });
+  const patches = [];
+  Object.entries(forkChildren).forEach(([forkId, children]) => {
+    const childSet = new Set(children);
+    edges.forEach(e => {
+      if (childSet.has(e.source) && childSet.has(e.target)) {
+        const srcLabel = _nodeLabel(nodes, e.source);
+        const tgtLabel = _nodeLabel(nodes, e.target);
+        const phase = _nodePhase(nodes, e.source);
+        const forkLabel = _nodeLabel(nodes, forkId);
+        patches.push({
+          check_id: 'SP1', severity: 'warning',
+          message: `'${srcLabel}' and '${tgtLabel}' are in a parallel group but '${tgtLabel}' depends on '${srcLabel}'s output.`,
+          location: phase ? `Phase "${phase}", fork "${forkLabel}"` : `Fork "${forkLabel}"`,
+          suggestion: `Move '${tgtLabel}' out of the parallel group. Create a new sequential phase after the parallel group containing only '${tgtLabel}'.`,
+          nodeId: e.target
+        });
+      }
+    });
+  });
+  return patches;
+}
+
+let currentPatches = [];
+
+function computePatches() {
+  if (currentSkillIndex < 0) return;
+  const skill = SKILLS_DATA.skills[currentSkillIndex];
+  currentPatches = suggestPatches(skill.nodes || [], skill.edges || []);
+}
+
+// ===== START =====
+init();
+</script>
+</body>
+</html>"""
+
+
+def build_report(data: dict, output_path: str):
+    """Generate the HTML report from parsed skills data."""
+    json_str = json.dumps(data, indent=None, ensure_ascii=False)
+    html = HTML_TEMPLATE.replace('%%SKILLS_DATA%%', json_str)
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    print(f"Report generated: {output_path}")
+    print(f"Skills: {len(data.get('skills', []))}")
+    for skill in data.get('skills', []):
+        score = skill.get('quality', {}).get('score', '?')
+        nodes = len(skill.get('nodes', []))
+        print(f"  • {skill.get('name', 'unnamed')} — score: {score}, nodes: {nodes}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate Skill Inspector HTML report')
+    parser.add_argument('--input', '-i', help='Path to skills_graph.json (or stdin)')
+    parser.add_argument('--output', '-o', default='skill-inspector.html',
+                        help='Output HTML file path')
+    args = parser.parse_args()
+
+    if args.input:
+        with open(args.input, 'r') as f:
+            data = json.load(f)
+    else:
+        data = json.load(sys.stdin)
+
+    build_report(data, args.output)
+
+
+if __name__ == '__main__':
+    main()
