@@ -629,6 +629,37 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     opacity: 0.7;
   }
 
+  .graph-svg .node-group.sim-waiting .node-rect {
+    animation: waitPulse 1.5s ease-in-out infinite;
+    stroke-width: 2.5;
+  }
+  @keyframes waitPulse {
+    0%, 100% { stroke-opacity: 0.3; }
+    50% { stroke-opacity: 1; filter: drop-shadow(0 0 8px rgba(0,240,255,0.3)); }
+  }
+
+  .sim-snackbar {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-family: 'Space Grotesk', sans-serif;
+    z-index: 50;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .sim-snackbar.visible {
+    display: block;
+    opacity: 1;
+  }
+
   .sim-toolbar {
     padding: 8px 20px;
     border-bottom: 1px solid var(--border);
@@ -868,6 +899,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--border-active); }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
 </head>
 <body>
 
@@ -904,6 +936,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <button class="sim-btn" onclick="simReset()" title="Reset">&#8634;</button>
     <span class="sim-status" id="simStatus"></span>
   </div>
+  <div class="sim-snackbar" id="simSnackbar"></div>
   <div class="graph-container" id="graphContainer">
     <div class="branch-overlay" id="branchOverlay">
       <h4>Select Branch</h4>
@@ -978,124 +1011,154 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 // ===== DATA (injected by build_report.py) =====
 const SKILLS_DATA = %%SKILLS_DATA%%;
 
-// ===== DAGRE LAYOUT ENGINE (minimal implementation) =====
-// Self-contained layout — no CDN dependency
-class DagreLayout {
-  constructor(nodes, edges, opts = {}) {
-    this.nodes = nodes.map(n => ({...n, width: opts.nodeWidth || 180, height: opts.nodeHeight || 56}));
-    this.edges = edges;
-    this.rankSep = opts.rankSep || 80;
-    this.nodeSep = opts.nodeSep || 40;
-    this.marginX = opts.marginX || 60;
-    this.marginY = opts.marginY || 40;
+// ===== LAYOUT ENGINE =====
+// Uses dagre library for proper graph layout with crossing minimization.
+// Falls back to a minimal BFS layout if dagre CDN fails to load.
+
+function dagreLayout(nodes, edges, opts = {}) {
+  const nodeWidth = opts.nodeWidth || 180;
+  const nodeHeight = opts.nodeHeight || 56;
+  const rankSep = opts.rankSep || 80;
+  const nodeSep = opts.nodeSep || 40;
+  const marginX = opts.marginX || 60;
+  const marginY = opts.marginY || 40;
+
+  const enrichedNodes = nodes.map(n => ({...n, width: nodeWidth, height: nodeHeight}));
+  const nodeMap = new Map(enrichedNodes.map(n => [n.id, n]));
+
+  // Use dagre if available, otherwise fall back
+  if (typeof dagre === 'undefined') {
+    console.warn('dagre library not loaded — using fallback layout');
+    return fallbackLayout(enrichedNodes, edges, {rankSep, nodeSep, marginX, marginY});
   }
 
-  layout() {
-    const nodeMap = new Map(this.nodes.map(n => [n.id, n]));
-    const inDegree = new Map(this.nodes.map(n => [n.id, 0]));
-    const outEdges = new Map(this.nodes.map(n => [n.id, []]));
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({rankdir: 'TB', ranksep: rankSep, nodesep: nodeSep, marginx: marginX, marginy: marginY});
+  g.setDefaultEdgeLabel(() => ({}));
 
-    this.edges.forEach(e => {
-      inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
-      outEdges.get(e.source)?.push(e.target);
-    });
-
-    // Assign ranks via topological sort (BFS)
-    const ranks = new Map();
-    const queue = [];
-    this.nodes.forEach(n => {
-      if ((inDegree.get(n.id) || 0) === 0) {
-        queue.push(n.id);
-        ranks.set(n.id, 0);
-      }
-    });
-
-    // Handle cycles: if no root found, use first node
-    if (queue.length === 0 && this.nodes.length > 0) {
-      queue.push(this.nodes[0].id);
-      ranks.set(this.nodes[0].id, 0);
+  enrichedNodes.forEach(n => g.setNode(n.id, {width: n.width, height: n.height}));
+  edges.forEach(e => {
+    if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
+      g.setEdge(e.source, e.target);
     }
+  });
 
-    let maxRank = 0;
-    while (queue.length > 0) {
-      const nid = queue.shift();
-      const rank = ranks.get(nid);
-      maxRank = Math.max(maxRank, rank);
-      (outEdges.get(nid) || []).forEach(tid => {
-        const newRank = rank + 1;
-        if (!ranks.has(tid) || ranks.get(tid) < newRank) {
-          ranks.set(tid, newRank);
-        }
-        const deg = inDegree.get(tid) - 1;
-        inDegree.set(tid, deg);
-        if (deg <= 0 && !queue.includes(tid)) {
-          queue.push(tid);
-        }
-      });
-    }
+  dagre.layout(g);
 
-    // Assign positions for unranked nodes
-    this.nodes.forEach(n => {
-      if (!ranks.has(n.id)) ranks.set(n.id, maxRank + 1);
-    });
+  // Read back node positions
+  enrichedNodes.forEach(n => {
+    const gn = g.node(n.id);
+    n.x = gn.x;
+    n.y = gn.y;
+  });
 
-    // Group by rank
-    const rankGroups = new Map();
-    this.nodes.forEach(n => {
-      const r = ranks.get(n.id);
-      if (!rankGroups.has(r)) rankGroups.set(r, []);
-      rankGroups.get(r).push(n);
-    });
-
-    // Position nodes
-    const sortedRanks = [...rankGroups.keys()].sort((a,b) => a - b);
-    let totalHeight = 0;
-
-    sortedRanks.forEach((rank, ri) => {
-      const group = rankGroups.get(rank);
-      const groupWidth = group.reduce((sum, n) => sum + n.width, 0) + (group.length - 1) * this.nodeSep;
-      let x = -groupWidth / 2;
-
-      group.forEach(n => {
-        n.x = x + n.width / 2;
-        n.y = ri * (n.height + this.rankSep);
-        x += n.width + this.nodeSep;
-      });
-
-      totalHeight = Math.max(totalHeight, ri * (group[0].height + this.rankSep) + group[0].height);
-    });
-
-    // Compute edge paths
-    this.edges.forEach(e => {
+  // Read back edge waypoints
+  edges.forEach(e => {
+    const ge = g.edge(e.source, e.target);
+    if (ge && ge.points) {
+      e.points = ge.points;
+    } else {
+      // Fallback: straight line between node centers
       const src = nodeMap.get(e.source);
       const tgt = nodeMap.get(e.target);
       if (src && tgt) {
         e.points = [
           {x: src.x, y: src.y + src.height / 2},
-          {x: (src.x + tgt.x) / 2, y: (src.y + src.height/2 + tgt.y - tgt.height/2) / 2},
           {x: tgt.x, y: tgt.y - tgt.height / 2}
         ];
       }
-    });
+    }
+  });
 
-    // Compute bounding box
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    this.nodes.forEach(n => {
-      minX = Math.min(minX, n.x - n.width/2);
-      maxX = Math.max(maxX, n.x + n.width/2);
-      minY = Math.min(minY, n.y - n.height/2);
-      maxY = Math.max(maxY, n.y + n.height/2);
-    });
+  const graph = g.graph();
+  return {
+    nodes: enrichedNodes,
+    edges: edges,
+    width: graph.width || 800,
+    height: graph.height || 600,
+    offsetX: 0,
+    offsetY: 0
+  };
+}
 
-    return {
-      nodes: this.nodes,
-      edges: this.edges,
-      width: maxX - minX + this.marginX * 2,
-      height: maxY - minY + this.marginY * 2,
-      offsetX: -minX + this.marginX,
-      offsetY: -minY + this.marginY
-    };
+// Minimal fallback layout when dagre CDN is unavailable
+function fallbackLayout(nodes, edges, opts) {
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const inDegree = new Map(nodes.map(n => [n.id, 0]));
+  const outEdges = new Map(nodes.map(n => [n.id, []]));
+
+  edges.forEach(e => {
+    inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+    outEdges.get(e.source)?.push(e.target);
+  });
+
+  const ranks = new Map();
+  const queue = [];
+  nodes.forEach(n => {
+    if ((inDegree.get(n.id) || 0) === 0) { queue.push(n.id); ranks.set(n.id, 0); }
+  });
+  if (queue.length === 0 && nodes.length > 0) { queue.push(nodes[0].id); ranks.set(nodes[0].id, 0); }
+
+  let maxRank = 0;
+  while (queue.length > 0) {
+    const nid = queue.shift();
+    const rank = ranks.get(nid);
+    maxRank = Math.max(maxRank, rank);
+    (outEdges.get(nid) || []).forEach(tid => {
+      const newRank = rank + 1;
+      if (!ranks.has(tid) || ranks.get(tid) < newRank) ranks.set(tid, newRank);
+      const deg = inDegree.get(tid) - 1;
+      inDegree.set(tid, deg);
+      if (deg <= 0 && !queue.includes(tid)) queue.push(tid);
+    });
   }
+  nodes.forEach(n => { if (!ranks.has(n.id)) ranks.set(n.id, maxRank + 1); });
+
+  const rankGroups = new Map();
+  nodes.forEach(n => {
+    const r = ranks.get(n.id);
+    if (!rankGroups.has(r)) rankGroups.set(r, []);
+    rankGroups.get(r).push(n);
+  });
+
+  [...rankGroups.keys()].sort((a,b) => a - b).forEach((rank, ri) => {
+    const group = rankGroups.get(rank);
+    const groupWidth = group.reduce((sum, n) => sum + n.width, 0) + (group.length - 1) * opts.nodeSep;
+    let x = -groupWidth / 2;
+    group.forEach(n => {
+      n.x = x + n.width / 2;
+      n.y = ri * (n.height + opts.rankSep);
+      x += n.width + opts.nodeSep;
+    });
+  });
+
+  edges.forEach(e => {
+    const src = nodeMap.get(e.source);
+    const tgt = nodeMap.get(e.target);
+    if (src && tgt) {
+      e.points = [
+        {x: src.x, y: src.y + src.height / 2},
+        {x: (src.x + tgt.x) / 2, y: (src.y + src.height/2 + tgt.y - tgt.height/2) / 2},
+        {x: tgt.x, y: tgt.y - tgt.height / 2}
+      ];
+    }
+  });
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    minX = Math.min(minX, n.x - n.width/2);
+    maxX = Math.max(maxX, n.x + n.width/2);
+    minY = Math.min(minY, n.y - n.height/2);
+    maxY = Math.max(maxY, n.y + n.height/2);
+  });
+
+  return {
+    nodes, edges,
+    width: maxX - minX + opts.marginX * 2,
+    height: maxY - minY + opts.marginY * 2,
+    offsetX: -minX + opts.marginX,
+    offsetY: -minY + opts.marginY
+  };
 }
 
 // ===== STATE =====
@@ -1207,12 +1270,12 @@ function renderGraph(skill) {
     return;
   }
 
-  const layout = new DagreLayout(nodes, edges, {
+  const layout = dagreLayout(nodes, edges, {
     nodeWidth: 220,
     nodeHeight: 80,
     rankSep: 100,
     nodeSep: 60
-  }).layout();
+  });
 
   // Build SVG
   const w = layout.width;
@@ -1238,7 +1301,7 @@ function renderGraph(skill) {
 
   svgContent += `<g id="graphGroup" transform="translate(${layout.offsetX}, ${layout.offsetY})">`;
 
-  // Edges
+  // Edges — build SVG path from dagre's multi-point waypoints
   layout.edges.forEach(e => {
     if (!e.points || e.points.length < 2) return;
     const p = e.points;
@@ -1246,12 +1309,38 @@ function renderGraph(skill) {
                        e.type === 'conditional' ? 'Conditional' :
                        e.type === 'chain' ? 'Chain' :
                        e.type === 'data_pass' ? 'DataPass' : 'Default';
-    const pathD = `M${p[0].x},${p[0].y} Q${p[1].x},${p[1].y} ${p[2].x},${p[2].y}`;
+
+    // Build path: M start, then cubic bezier spline through waypoints
+    let pathD;
+    if (p.length === 2) {
+      pathD = `M${p[0].x},${p[0].y} L${p[1].x},${p[1].y}`;
+    } else if (p.length === 3) {
+      pathD = `M${p[0].x},${p[0].y} Q${p[1].x},${p[1].y} ${p[2].x},${p[2].y}`;
+    } else {
+      // 4+ points: use cubic bezier with smooth continuation
+      pathD = `M${p[0].x},${p[0].y}`;
+      if (p.length === 4) {
+        pathD += ` C${p[1].x},${p[1].y} ${p[2].x},${p[2].y} ${p[3].x},${p[3].y}`;
+      } else {
+        // First cubic segment uses points 0-3
+        pathD += ` C${p[1].x},${p[1].y} ${p[2].x},${p[2].y} ${p[3].x},${p[3].y}`;
+        // Remaining points use smooth continuation (S)
+        for (let i = 4; i < p.length; i += 2) {
+          if (i + 1 < p.length) {
+            pathD += ` S${p[i].x},${p[i].y} ${p[i+1].x},${p[i+1].y}`;
+          } else {
+            pathD += ` L${p[i].x},${p[i].y}`;
+          }
+        }
+      }
+    }
+
     svgContent += `<path d="${pathD}" class="edge-path ${e.type || ''}" data-source="${e.source}" data-target="${e.target}" marker-end="url(#arrow${markerType})"/>`;
 
     if (e.label) {
-      const mx = p[1].x;
-      const my = p[1].y - 8;
+      const mid = p[Math.floor(p.length / 2)];
+      const mx = mid.x;
+      const my = mid.y - 8;
       const labelW = e.label.length * 5.5 + 10;
       svgContent += `<rect class="edge-label-bg" x="${mx - labelW/2}" y="${my - 7}" width="${labelW}" height="14"/>`;
       svgContent += `<text x="${mx}" y="${my}" class="edge-label">${esc(e.label)}</text>`;
@@ -1447,8 +1536,19 @@ function setupInteraction(svg, w, h) {
     e.preventDefault();
     const speed = getZoomSpeed();
     const base = e.deltaY > 0 ? -0.03 : 0.03;
-    const factor = 1 + base * speed;
-    transform.scale = Math.max(0.02, Math.min(50, transform.scale * factor));
+    const ratio = 1 + base * speed;
+    const newScale = Math.max(0.02, Math.min(50, transform.scale * ratio));
+    const r = newScale / transform.scale;
+
+    // Zoom toward mouse: adjust pan so SVG point under cursor stays fixed
+    const rect = svg.getBoundingClientRect();
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+    const w = originalViewBox.w;
+    const h = originalViewBox.h;
+    transform.x = transform.x * r + w * (r - 1) * (0.5 - fx);
+    transform.y = transform.y * r + h * (r - 1) * (0.5 - fy);
+    transform.scale = newScale;
     updateTransform();
   };
 }
@@ -1708,6 +1808,8 @@ class SimulationEngine {
     this._waitingForSelection = false;
     this._branchOptions = [];
     this._complete = false;
+    this._convergingFork = null;
+    this._independentForkCount = 0;
   }
 
   _findEntryNode() {
@@ -1735,6 +1837,19 @@ class SimulationEngine {
   _isFork(id) { return this._getNodeType(id) === 'fork'; }
   _isJoin(id) { return this._getNodeType(id) === 'join'; }
 
+  _findJoinForBranch(startId) {
+    const visited = new Set();
+    const queue = [startId];
+    while (queue.length) {
+      const nid = queue.shift();
+      if (visited.has(nid)) continue;
+      visited.add(nid);
+      if (this._isJoin(nid)) return nid;
+      this._outgoing(nid).forEach(e => queue.push(e.target));
+    }
+    return null;
+  }
+
   _activateNodes(ids) {
     this._active = ids;
     if (ids.length === 1 && this._isDecisionNode(ids[0])) {
@@ -1749,46 +1864,138 @@ class SimulationEngine {
     this._visited = [];
     this._waitingForSelection = false;
     this._branchOptions = [];
+    this._convergingFork = null;
+    this._independentForkCount = 0;
     const entry = this._findEntryNode();
     if (entry) this._activateNodes([entry]);
     else this._active = [];
   }
 
+  _stepConverging() {
+    const cf = this._convergingFork;
+    const branch = cf.branches[cf.currentBranchIndex];
+
+    const allSuccessors = [];
+    for (const nodeId of this._active) {
+      if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+      const out = this._outgoing(nodeId);
+      out.forEach(e => { if (!allSuccessors.includes(e.target)) allSuccessors.push(e.target); });
+    }
+
+    const joinId = cf.joinId;
+    const reachedJoin = allSuccessors.includes(joinId);
+    const nonJoinSuccessors = allSuccessors.filter(s => s !== joinId);
+
+    if (reachedJoin && !nonJoinSuccessors.length) {
+      cf.arrivedAtJoin.push(branch[0]);
+      cf.currentBranchIndex++;
+
+      if (cf.currentBranchIndex >= cf.branches.length) {
+        this._convergingFork = null;
+        this._activateNodes([joinId]);
+      } else {
+        const nextBranch = cf.branches[cf.currentBranchIndex];
+        this._activateNodes([nextBranch[0]]);
+      }
+    } else if (nonJoinSuccessors.length) {
+      this._activateNodes(nonJoinSuccessors);
+    } else {
+      cf.arrivedAtJoin.push(branch[0]);
+      cf.currentBranchIndex++;
+      if (cf.currentBranchIndex >= cf.branches.length) {
+        this._convergingFork = null;
+        this._activateNodes([joinId]);
+      } else {
+        const nextBranch = cf.branches[cf.currentBranchIndex];
+        this._activateNodes([nextBranch[0]]);
+      }
+    }
+  }
+
   step() {
     if (this._complete || !this._active.length || this._waitingForSelection) return;
 
-    const nodeId = this._active[0];
-    const remaining = this._active.slice(1);
-    const out = this._outgoing(nodeId);
+    this._independentForkCount = 0;
 
-    if (!out.length) {
-      if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
-      if (!remaining.length) { this._complete = true; this._active = []; }
-      else this._active = remaining;
+    if (this._convergingFork !== null) {
+      this._stepConverging();
       return;
     }
 
-    if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+    const allSuccessors = [];
 
-    let successors = [];
-    if (this._isFork(nodeId)) {
-      out.forEach(e => { if (!successors.includes(e.target)) successors.push(e.target); });
-    } else {
-      out.forEach(e => {
-        if (this._isJoin(e.target)) {
-          const inc = this._incoming(e.target);
-          if (inc.every(ie => this._visited.includes(ie.source)) && !successors.includes(e.target)) {
-            successors.push(e.target);
+    for (const nodeId of this._active) {
+      if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+
+      const out = this._outgoing(nodeId);
+      if (!out.length) continue;
+
+      if (this._isFork(nodeId)) {
+        const branchTargets = [];
+        out.forEach(e => {
+          if (!branchTargets.some(bt => bt[0] === e.target)) {
+            const joinId = this._findJoinForBranch(e.target);
+            branchTargets.push([e.target, joinId]);
           }
-        } else {
-          if (!successors.includes(e.target)) successors.push(e.target);
+        });
+
+        const converging = {};
+        const independent = [];
+        branchTargets.forEach(([target, joinId]) => {
+          if (joinId !== null) {
+            if (!converging[joinId]) converging[joinId] = [];
+            converging[joinId].push(target);
+          } else {
+            independent.push(target);
+          }
+        });
+
+        let convGroup = null, convJoin = null;
+        for (const [jid, branches] of Object.entries(converging)) {
+          if (branches.length >= 2) {
+            convGroup = branches;
+            convJoin = jid;
+            break;
+          } else {
+            independent.push(...branches);
+          }
         }
-      });
+
+        if (convGroup) {
+          this._convergingFork = {
+            forkId: nodeId,
+            joinId: convJoin,
+            branches: convGroup.map(b => [b]),
+            currentBranchIndex: 0,
+            arrivedAtJoin: [],
+          };
+          const activate = [convGroup[0], ...independent];
+          if (independent.length) this._independentForkCount = independent.length;
+          this._activateNodes(activate);
+        } else {
+          this._independentForkCount = independent.length;
+          independent.forEach(target => {
+            if (!allSuccessors.includes(target)) allSuccessors.push(target);
+          });
+        }
+      } else {
+        out.forEach(e => {
+          if (this._isJoin(e.target)) {
+            const inc = this._incoming(e.target);
+            if (inc.every(ie => this._visited.includes(ie.source)) && !allSuccessors.includes(e.target)) {
+              allSuccessors.push(e.target);
+            }
+          } else {
+            if (!allSuccessors.includes(e.target)) allSuccessors.push(e.target);
+          }
+        });
+      }
     }
 
-    const newActive = successors.concat(remaining);
-    if (!newActive.length) { this._complete = true; this._active = []; }
-    else this._activateNodes(newActive);
+    if (this._convergingFork !== null) return;
+
+    if (!allSuccessors.length) { this._complete = true; this._active = []; }
+    else this._activateNodes(allSuccessors);
   }
 
   selectBranch(index) {
@@ -1807,6 +2014,8 @@ class SimulationEngine {
     this._waitingForSelection = false;
     this._branchOptions = [];
     this._complete = false;
+    this._convergingFork = null;
+    this._independentForkCount = 0;
   }
 
   isComplete() { return this._complete; }
@@ -1817,6 +2026,8 @@ class SimulationEngine {
       visited: [...this._visited],
       waitingForSelection: this._waitingForSelection,
       branchOptions: [...this._branchOptions],
+      convergingFork: this._convergingFork ? {...this._convergingFork} : null,
+      independentForkCount: this._independentForkCount,
     };
   }
 }
@@ -1886,6 +2097,7 @@ function simReset() {
   simApplyState();
   simUpdateStatus('Reset — press play or step');
   document.getElementById('branchOverlay').classList.remove('visible');
+  document.getElementById('simSnackbar').classList.remove('visible');
 }
 
 function simApplyState() {
@@ -1897,10 +2109,12 @@ function simApplyState() {
 
   document.querySelectorAll('.node-group').forEach(g => {
     const id = g.dataset.id;
-    g.classList.remove('sim-active', 'sim-visited', 'sim-unvisited');
+    g.classList.remove('sim-active', 'sim-visited', 'sim-unvisited', 'sim-waiting');
     if (state.active.length === 0 && state.visited.length === 0) return;
     if (state.active.includes(id)) {
       g.classList.add('sim-active');
+    } else if (state.convergingFork && id === state.convergingFork.joinId && state.convergingFork.arrivedAtJoin.length > 0) {
+      g.classList.add('sim-waiting');
     } else if (state.visited.includes(id)) {
       g.classList.add('sim-visited');
     } else {
@@ -1938,13 +2152,28 @@ function simApplyState() {
     overlay.classList.remove('visible');
   }
 
+  // Snackbar for independent fork
+  const snackbar = document.getElementById('simSnackbar');
+  if (state.independentForkCount > 0) {
+    snackbar.textContent = `\u2442 ${state.independentForkCount} parallel branches activated`;
+    snackbar.classList.add('visible');
+  } else if (state.active.length <= 1 || state.convergingFork) {
+    snackbar.classList.remove('visible');
+  }
+
   // Auto-pan to active nodes
   if (state.active.length > 0) {
     smoothPanToActiveNodes(state.active);
   }
 
+  // Status
   if (simEngine.isComplete()) {
     simUpdateStatus('Simulation complete');
+    snackbar.classList.remove('visible');
+  } else if (state.convergingFork) {
+    const cf = state.convergingFork;
+    const branchNode = state.active[0] || '';
+    simUpdateStatus(`\u2442 Branch ${cf.currentBranchIndex + 1}/${cf.branches.length} \u2014 ${branchNode}`);
   } else if (!state.waitingForSelection) {
     const activeNames = state.active.join(', ');
     simUpdateStatus(activeNames ? `Active: ${activeNames}` : 'Ready');

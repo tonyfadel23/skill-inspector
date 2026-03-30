@@ -614,6 +614,37 @@
     opacity: 0.7;
   }
 
+  .graph-svg .node-group.sim-waiting .node-rect {
+    animation: waitPulse 1.5s ease-in-out infinite;
+    stroke-width: 2.5;
+  }
+  @keyframes waitPulse {
+    0%, 100% { stroke-opacity: 0.3; }
+    50% { stroke-opacity: 1; filter: drop-shadow(0 0 8px rgba(0,240,255,0.3)); }
+  }
+
+  .sim-snackbar {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-family: 'Space Grotesk', sans-serif;
+    z-index: 50;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .sim-snackbar.visible {
+    display: block;
+    opacity: 1;
+  }
+
   /* Simulation toolbar */
   .sim-toolbar {
     padding: 8px 20px;
@@ -856,6 +887,7 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--border-active); }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
 </head>
 <body>
 
@@ -892,6 +924,7 @@
     <button class="sim-btn" onclick="simReset()" title="Reset">&#8634;</button>
     <span class="sim-status" id="simStatus"></span>
   </div>
+  <div class="sim-snackbar" id="simSnackbar"></div>
   <div class="graph-container" id="graphContainer">
     <div class="branch-overlay" id="branchOverlay">
       <h4>Select Branch</h4>
@@ -966,124 +999,154 @@
 // ===== DATA (injected by build_report.py) =====
 const SKILLS_DATA = {"generated_at": "2026-03-29T12:00:00Z", "mode": "standard", "skills": [{"name": "product-brief", "path": "/mnt/skills/user/product-brief/SKILL.md", "description": "Generate a product-brief.md for the LEAP EXPLORE stage. Runs DIVERGE → STRESS-TEST → CONVERGE via parallel agents.", "pattern": "parallel-fan-out-fan-in", "state_machine": ["diverging", "stress-testing", "converging", "recommended", "activated", "parked", "killed"], "dependencies": {"mcp_servers": ["google-drive", "looker"], "files": ["references/examples.md"], "skills": ["prototype", "experiment-design"]}, "nodes": [{"id": "entry", "label": "Read _context.md", "type": "file_io", "phase": "Entry", "raw_instruction": "Input: {opportunity}/_context.md from LIVE stage. Do not run without it.", "inputs": ["{opportunity}/_context.md"], "outputs": [], "warnings": []}, {"id": "diverge_fork", "label": "DIVERGE Phase", "type": "fork", "phase": "DIVERGE", "raw_instruction": "Phase 1 — DIVERGE (all parallel, state = diverging). Competitive Intel + 3 Concept Agents spawn simultaneously.", "inputs": ["{opportunity}/_context.md"], "outputs": [], "warnings": []}, {"id": "competitive_intel", "label": "Competitive Intel", "type": "executor", "phase": "DIVERGE", "raw_instruction": "Search Drive + web. What has been tried, what worked, what failed. Save to _workspace/competitive_intel.md. If unavailable: write _workspace/intel_blocked.md and continue.", "inputs": [], "outputs": ["_workspace/competitive_intel.md"], "warnings": []}, {"id": "intel_tool_drive", "label": "Search Drive", "type": "tool", "phase": "DIVERGE", "raw_instruction": "Search Drive + web", "inputs": [], "outputs": [], "warnings": []}, {"id": "intel_tool_web", "label": "Web Search", "type": "tool", "phase": "DIVERGE", "raw_instruction": "Search Drive + web", "inputs": [], "outputs": [], "warnings": []}, {"id": "concept_a", "label": "Concept Agent A", "type": "executor", "phase": "DIVERGE", "raw_instruction": "Assign divergence dimensions e.g. most user-centric. Each concept covers: the bet in one sentence, CX before→after in customer language, why it might win, why it might fail, rough release structure.", "inputs": ["{opportunity}/_context.md"], "outputs": ["_workspace/concepts/concept-A.md"], "warnings": []}, {"id": "concept_b", "label": "Concept Agent B", "type": "executor", "phase": "DIVERGE", "raw_instruction": "Assign divergence dimensions e.g. most technically novel. Must diverge — not 3 variations of one idea.", "inputs": ["{opportunity}/_context.md"], "outputs": ["_workspace/concepts/concept-B.md"], "warnings": []}, {"id": "concept_c", "label": "Concept Agent C", "type": "executor", "phase": "DIVERGE", "raw_instruction": "Assign divergence dimensions e.g. most operationally lean. Must diverge — not 3 variations of one idea.", "inputs": ["{opportunity}/_context.md"], "outputs": ["_workspace/concepts/concept-C.md"], "warnings": []}, {"id": "stress_fork", "label": "STRESS-TEST Phase", "type": "fork", "phase": "STRESS-TEST", "raw_instruction": "Phase 2 — STRESS-TEST (all parallel, state = stress-testing). Run after all concept files exist.", "inputs": ["_workspace/concepts/concept-A.md", "_workspace/concepts/concept-B.md", "_workspace/concepts/concept-C.md", "_workspace/competitive_intel.md"], "outputs": [], "warnings": []}, {"id": "risk_assessment", "label": "Risk Assessment", "type": "executor", "phase": "STRESS-TEST", "raw_instruction": "For each concept, identify the 2-3 riskiest assumptions. Type each: Value / Usability / Feasibility / Viability. Order by likelihood-of-wrong × impact-if-wrong.", "inputs": ["_workspace/concepts/concept-A.md", "_workspace/concepts/concept-B.md", "_workspace/concepts/concept-C.md"], "outputs": ["_workspace/risk_register.md"], "warnings": []}, {"id": "premortem", "label": "Pre-Mortem", "type": "executor", "phase": "STRESS-TEST", "raw_instruction": "Assume it's 12 months from now and the concept failed. What happened? 2 failure narratives per concept. End with: what one thing must go right. Note any failure pattern that appears across all 3 concepts.", "inputs": ["_workspace/concepts/concept-A.md", "_workspace/concepts/concept-B.md", "_workspace/concepts/concept-C.md"], "outputs": ["_workspace/premortem.md"], "warnings": []}, {"id": "feasibility", "label": "Feasibility Check", "type": "executor", "phase": "STRESS-TEST", "raw_instruction": "Pull 3-5 relevant metrics from Looker. Check Drive for prior experiments, tech constraints, ops readiness. Flag which concept assumptions are supported, contradicted, or untested.", "inputs": [], "outputs": ["_workspace/feasibility.md"], "warnings": ["Depends on Looker MCP but fallback only says 'note gaps explicitly' — doesn't specify what to do if ALL data sources are unavailable"]}, {"id": "feasibility_looker", "label": "Query Looker", "type": "tool", "phase": "STRESS-TEST", "raw_instruction": "Pull 3-5 relevant metrics from Looker. If Looker/Drive unavailable: note gaps explicitly, continue.", "inputs": [], "outputs": [], "warnings": []}, {"id": "converge_join", "label": "CONVERGE Join", "type": "join", "phase": "CONVERGE", "raw_instruction": "Phase 3 — CONVERGE (state = converging). Read all workspace files.", "inputs": ["_workspace/competitive_intel.md", "_workspace/concepts/concept-A.md", "_workspace/concepts/concept-B.md", "_workspace/concepts/concept-C.md", "_workspace/risk_register.md", "_workspace/premortem.md", "_workspace/feasibility.md"], "outputs": [], "warnings": []}, {"id": "synthesizer", "label": "Synthesizer Agent", "type": "executor", "phase": "CONVERGE", "raw_instruction": "Read all workspace files. Select the recommended concept using compound prioritisation (in order): relationship stage first → clearest release path → CX KPI over feature KPI → opportunity cost. Write the three artefacts.", "inputs": ["_workspace/*"], "outputs": ["product-brief.md", "pre-mortem.md", "recommendation.md"], "warnings": []}, {"id": "read_examples", "label": "Read Quality Bar", "type": "file_io", "phase": "CONVERGE", "raw_instruction": "Read references/examples.md before writing. Match tone and quality bar shown there.", "inputs": ["references/examples.md"], "outputs": [], "warnings": ["Referenced file references/examples.md not found on disk — quality bar cannot be enforced"]}, {"id": "reviewer", "label": "Reviewer Agent", "type": "validator", "phase": "CONVERGE", "raw_instruction": "Read all three artefacts. Check every quality gate in references/examples.md. Fix failures — do not pass with a note. Set state to recommended when all gates pass.", "inputs": ["product-brief.md", "pre-mortem.md", "recommendation.md", "references/examples.md"], "outputs": ["product-brief.md", "recommendation.md"], "warnings": ["Validator says 'fix failures' but doesn't specify retry limit — could loop indefinitely"]}, {"id": "template_brief", "label": "Brief Template", "type": "template", "phase": "CONVERGE", "raw_instruction": "product-brief.md Template with sections: Opportunity, Customer Experience, Why Not, Recommended Approach, Release Structure, Riskiest Assumptions, End-to-End Scope, Open Questions.", "inputs": [], "outputs": ["product-brief.md"], "warnings": []}, {"id": "template_recommendation", "label": "Recommendation Template", "type": "template", "phase": "CONVERGE", "raw_instruction": "recommendation.md Template with sections: Recommended, Why this concept, Why not the others, What must be true.", "inputs": [], "outputs": ["recommendation.md"], "warnings": []}, {"id": "delivery_gate", "label": "User Decision Gate", "type": "gate", "phase": "Delivery", "raw_instruction": "Present product-brief.md inline. State the recommended concept and the single most important assumption to test. Surface top 2 pre-mortem failure scenarios.\nAsk: Ready to activate and move to ALLOCATE (bet-card), or prototype first?", "inputs": ["product-brief.md", "recommendation.md"], "outputs": [], "warnings": []}, {"id": "route_prototype", "label": "Chain → prototype", "type": "spawn", "phase": "Delivery", "raw_instruction": "Prototype requested → chain to prototype skill", "inputs": ["product-brief.md"], "outputs": [], "warnings": ["Cross-skill chain to 'prototype' — verify output format matches prototype skill's expected input"]}, {"id": "route_experiment", "label": "Chain → experiment-design", "type": "spawn", "phase": "Delivery", "raw_instruction": "Activating → chain to experiment-design skill", "inputs": ["product-brief.md"], "outputs": [], "warnings": ["Cross-skill chain to 'experiment-design' — skill not found in scanned inventory"]}, {"id": "route_park", "label": "Park Concept", "type": "executor", "phase": "Delivery", "raw_instruction": "Parking → state = parked, write reason in recommendation.md", "inputs": [], "outputs": ["recommendation.md"], "warnings": []}], "edges": [{"source": "entry", "target": "diverge_fork", "type": "sequential", "label": "context loaded"}, {"source": "diverge_fork", "target": "competitive_intel", "type": "parallel", "label": ""}, {"source": "diverge_fork", "target": "concept_a", "type": "parallel", "label": "user-centric"}, {"source": "diverge_fork", "target": "concept_b", "type": "parallel", "label": "tech novel"}, {"source": "diverge_fork", "target": "concept_c", "type": "parallel", "label": "ops lean"}, {"source": "competitive_intel", "target": "intel_tool_drive", "type": "sequential", "label": ""}, {"source": "competitive_intel", "target": "intel_tool_web", "type": "sequential", "label": ""}, {"source": "competitive_intel", "target": "stress_fork", "type": "data_pass", "label": "intel.md"}, {"source": "concept_a", "target": "stress_fork", "type": "data_pass", "label": "concept-A.md"}, {"source": "concept_b", "target": "stress_fork", "type": "data_pass", "label": "concept-B.md"}, {"source": "concept_c", "target": "stress_fork", "type": "data_pass", "label": "concept-C.md"}, {"source": "stress_fork", "target": "risk_assessment", "type": "parallel", "label": ""}, {"source": "stress_fork", "target": "premortem", "type": "parallel", "label": ""}, {"source": "stress_fork", "target": "feasibility", "type": "parallel", "label": ""}, {"source": "feasibility", "target": "feasibility_looker", "type": "sequential", "label": ""}, {"source": "risk_assessment", "target": "converge_join", "type": "data_pass", "label": "risk_register.md"}, {"source": "premortem", "target": "converge_join", "type": "data_pass", "label": "premortem.md"}, {"source": "feasibility", "target": "converge_join", "type": "data_pass", "label": "feasibility.md"}, {"source": "converge_join", "target": "read_examples", "type": "sequential", "label": ""}, {"source": "read_examples", "target": "synthesizer", "type": "sequential", "label": "quality bar loaded"}, {"source": "synthesizer", "target": "template_brief", "type": "sequential", "label": "uses template"}, {"source": "synthesizer", "target": "template_recommendation", "type": "sequential", "label": "uses template"}, {"source": "synthesizer", "target": "reviewer", "type": "sequential", "label": "artefacts written"}, {"source": "reviewer", "target": "delivery_gate", "type": "sequential", "label": "all gates pass"}, {"source": "delivery_gate", "target": "route_prototype", "type": "conditional", "label": "prototype requested"}, {"source": "delivery_gate", "target": "route_experiment", "type": "conditional", "label": "activating"}, {"source": "delivery_gate", "target": "route_park", "type": "conditional", "label": "parking"}], "quality": {"score": 7.5, "summary": "Well-structured parallel pipeline with clear phase separation. Minor gaps in error handling and cross-skill contracts.", "top_issues": ["references/examples.md not found — Reviewer and Synthesizer quality bar is unenforceable", "Reviewer has no retry limit — 'fix failures' could loop indefinitely", "Cross-skill chain to 'experiment-design' references a skill not in the scanned inventory"]}}, {"name": "prototype-prd", "path": "/mnt/skills/user/prototype-prd/SKILL.md", "description": "Generate a prototype-prd.md for a concept in the LEAP EXPLORE stage. Reads the product-brief, pulls design system context, and produces a machine-readable spec.", "pattern": "sequential-with-parallel-research", "state_machine": ["speccing", "ready", "in-prototype", "tested", "shipped", "parked"], "dependencies": {"mcp_servers": ["google-drive"], "files": ["references/examples.md"], "skills": ["prototype"]}, "nodes": [{"id": "entry", "label": "Read product-brief.md", "type": "file_io", "phase": "Entry", "raw_instruction": "Input: {concept}/product-brief.md — must exist and be in recommended state. Do not run without it.", "inputs": ["{concept}/product-brief.md"], "outputs": [], "warnings": ["No validation that product-brief.md is in 'recommended' state — just a prose instruction, not an enforceable check"]}, {"id": "research_fork", "label": "RESEARCH Phase", "type": "fork", "phase": "RESEARCH", "raw_instruction": "Phase 1 — RESEARCH (all parallel, state = speccing). Design System Pull + Inspiration & Analogues.", "inputs": [], "outputs": [], "warnings": []}, {"id": "design_system", "label": "Design System Pull", "type": "executor", "phase": "RESEARCH", "raw_instruction": "Search Drive for the talabat design system documentation — component library, design tokens, colour palette, typography, spacing scale, iconography. Extract: which components exist that this concept will use, and what overrides or custom treatments the concept will need. If Drive unavailable: note gap and default to React Native + Tailwind tokens as fallback stack.", "inputs": [], "outputs": ["_workspace/design_context.md"], "warnings": []}, {"id": "design_drive_search", "label": "Search Drive (design)", "type": "tool", "phase": "RESEARCH", "raw_instruction": "Search Drive for the talabat design system documentation.", "inputs": [], "outputs": [], "warnings": []}, {"id": "inspiration", "label": "Inspiration & Analogues", "type": "executor", "phase": "RESEARCH", "raw_instruction": "Search Drive for prior prototype specs and any UX reference docs. Search web for 2-3 analogous interaction patterns from products that have solved a similar CX moment well — inside or outside food/Q-commerce. Frame each as: what pattern, why it works for this moment, what to borrow vs avoid.", "inputs": [], "outputs": ["_workspace/inspiration.md"], "warnings": []}, {"id": "inspiration_drive", "label": "Search Drive (priors)", "type": "tool", "phase": "RESEARCH", "raw_instruction": "Search Drive for prior prototype specs and any UX reference docs.", "inputs": [], "outputs": [], "warnings": []}, {"id": "inspiration_web", "label": "Web Search (analogues)", "type": "tool", "phase": "RESEARCH", "raw_instruction": "Search web for 2-3 analogous interaction patterns.", "inputs": [], "outputs": [], "warnings": []}, {"id": "spec_writer", "label": "Spec Writer", "type": "executor", "phase": "WRITE", "raw_instruction": "Read product-brief.md, _workspace/design_context.md, _workspace/inspiration.md. Extract from the brief: the recommended concept, CX before→after, the moment that matters, the riskiest assumption, and the relationship stage. Use these as the anchors for every spec decision — the prototype exists to test the riskiest assumption, nothing else.", "inputs": ["product-brief.md", "_workspace/design_context.md", "_workspace/inspiration.md"], "outputs": ["prototype-prd.md"], "warnings": []}, {"id": "read_examples", "label": "Read Quality Bar", "type": "file_io", "phase": "WRITE", "raw_instruction": "Read references/examples.md before writing. Match tone and quality bar shown there.", "inputs": ["references/examples.md"], "outputs": [], "warnings": ["Referenced file references/examples.md not found on disk"]}, {"id": "template_prd", "label": "PRD Template", "type": "template", "phase": "WRITE", "raw_instruction": "prototype-prd.md Template with sections: Product Overview, Screens, Key Flows, Design System, Screen Specifications, Build Order, Riskiest Assumption, Export Specifications.", "inputs": [], "outputs": ["prototype-prd.md"], "warnings": []}, {"id": "reviewer", "label": "Reviewer Agent", "type": "validator", "phase": "REVIEW", "raw_instruction": "Read prototype-prd.md. Check every gate in references/examples.md. Fix failures — do not pass with a note. Set state to ready when all gates pass.", "inputs": ["prototype-prd.md", "references/examples.md"], "outputs": ["prototype-prd.md"], "warnings": ["Same retry-without-limit pattern as product-brief — 'fix failures' has no bound"]}, {"id": "delivery_gate", "label": "User Decision Gate", "type": "gate", "phase": "Delivery", "raw_instruction": "Present prototype-prd.md inline. State the riskiest assumption being tested and the primary test method. Note which screen to build first.\nAsk: Ready to generate the prototype, or do you want to adjust the spec first?", "inputs": ["prototype-prd.md"], "outputs": [], "warnings": []}, {"id": "route_generate", "label": "Chain → prototype", "type": "spawn", "phase": "Delivery", "raw_instruction": "Generate prototype → pass prototype-prd.md to the prototype skill", "inputs": ["prototype-prd.md"], "outputs": [], "warnings": ["Cross-skill chain to 'prototype' — skill not found in scanned inventory"]}, {"id": "route_adjust", "label": "Adjust Spec", "type": "executor", "phase": "Delivery", "raw_instruction": "Adjust spec → revise inline, re-run Reviewer", "inputs": ["prototype-prd.md"], "outputs": ["prototype-prd.md"], "warnings": []}], "edges": [{"source": "entry", "target": "research_fork", "type": "sequential", "label": "brief validated"}, {"source": "research_fork", "target": "design_system", "type": "parallel", "label": ""}, {"source": "research_fork", "target": "inspiration", "type": "parallel", "label": ""}, {"source": "design_system", "target": "design_drive_search", "type": "sequential", "label": ""}, {"source": "inspiration", "target": "inspiration_drive", "type": "sequential", "label": ""}, {"source": "inspiration", "target": "inspiration_web", "type": "sequential", "label": ""}, {"source": "design_system", "target": "spec_writer", "type": "data_pass", "label": "design_context.md"}, {"source": "inspiration", "target": "spec_writer", "type": "data_pass", "label": "inspiration.md"}, {"source": "read_examples", "target": "spec_writer", "type": "sequential", "label": "quality bar"}, {"source": "spec_writer", "target": "template_prd", "type": "sequential", "label": "uses template"}, {"source": "spec_writer", "target": "reviewer", "type": "sequential", "label": "spec written"}, {"source": "reviewer", "target": "delivery_gate", "type": "sequential", "label": "all gates pass"}, {"source": "delivery_gate", "target": "route_generate", "type": "conditional", "label": "generate"}, {"source": "delivery_gate", "target": "route_adjust", "type": "conditional", "label": "adjust"}, {"source": "route_adjust", "target": "reviewer", "type": "sequential", "label": "re-review"}], "quality": {"score": 7.0, "summary": "Clean sequential-with-parallel-research pattern. Missing state validation at entry, unbounded reviewer loop, and broken cross-skill references.", "top_issues": ["Entry doesn't enforce 'recommended' state check on product-brief.md — could run on a brief that hasn't been approved", "references/examples.md not found — quality gates can't be checked", "Cross-skill chain to 'prototype' references a skill not found in the scanned inventory"]}}]};
 
-// ===== DAGRE LAYOUT ENGINE (minimal implementation) =====
-// Self-contained layout — no CDN dependency
-class DagreLayout {
-  constructor(nodes, edges, opts = {}) {
-    this.nodes = nodes.map(n => ({...n, width: opts.nodeWidth || 180, height: opts.nodeHeight || 56}));
-    this.edges = edges;
-    this.rankSep = opts.rankSep || 80;
-    this.nodeSep = opts.nodeSep || 40;
-    this.marginX = opts.marginX || 60;
-    this.marginY = opts.marginY || 40;
+// ===== LAYOUT ENGINE =====
+// Uses dagre library for proper graph layout with crossing minimization.
+// Falls back to a minimal BFS layout if dagre CDN fails to load.
+
+function dagreLayout(nodes, edges, opts = {}) {
+  const nodeWidth = opts.nodeWidth || 180;
+  const nodeHeight = opts.nodeHeight || 56;
+  const rankSep = opts.rankSep || 80;
+  const nodeSep = opts.nodeSep || 40;
+  const marginX = opts.marginX || 60;
+  const marginY = opts.marginY || 40;
+
+  const enrichedNodes = nodes.map(n => ({...n, width: nodeWidth, height: nodeHeight}));
+  const nodeMap = new Map(enrichedNodes.map(n => [n.id, n]));
+
+  // Use dagre if available, otherwise fall back
+  if (typeof dagre === 'undefined') {
+    console.warn('dagre library not loaded — using fallback layout');
+    return fallbackLayout(enrichedNodes, edges, {rankSep, nodeSep, marginX, marginY});
   }
 
-  layout() {
-    const nodeMap = new Map(this.nodes.map(n => [n.id, n]));
-    const inDegree = new Map(this.nodes.map(n => [n.id, 0]));
-    const outEdges = new Map(this.nodes.map(n => [n.id, []]));
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({rankdir: 'TB', ranksep: rankSep, nodesep: nodeSep, marginx: marginX, marginy: marginY});
+  g.setDefaultEdgeLabel(() => ({}));
 
-    this.edges.forEach(e => {
-      inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
-      outEdges.get(e.source)?.push(e.target);
-    });
-
-    // Assign ranks via topological sort (BFS)
-    const ranks = new Map();
-    const queue = [];
-    this.nodes.forEach(n => {
-      if ((inDegree.get(n.id) || 0) === 0) {
-        queue.push(n.id);
-        ranks.set(n.id, 0);
-      }
-    });
-
-    // Handle cycles: if no root found, use first node
-    if (queue.length === 0 && this.nodes.length > 0) {
-      queue.push(this.nodes[0].id);
-      ranks.set(this.nodes[0].id, 0);
+  enrichedNodes.forEach(n => g.setNode(n.id, {width: n.width, height: n.height}));
+  edges.forEach(e => {
+    if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
+      g.setEdge(e.source, e.target);
     }
+  });
 
-    let maxRank = 0;
-    while (queue.length > 0) {
-      const nid = queue.shift();
-      const rank = ranks.get(nid);
-      maxRank = Math.max(maxRank, rank);
-      (outEdges.get(nid) || []).forEach(tid => {
-        const newRank = rank + 1;
-        if (!ranks.has(tid) || ranks.get(tid) < newRank) {
-          ranks.set(tid, newRank);
-        }
-        const deg = inDegree.get(tid) - 1;
-        inDegree.set(tid, deg);
-        if (deg <= 0 && !queue.includes(tid)) {
-          queue.push(tid);
-        }
-      });
-    }
+  dagre.layout(g);
 
-    // Assign positions for unranked nodes
-    this.nodes.forEach(n => {
-      if (!ranks.has(n.id)) ranks.set(n.id, maxRank + 1);
-    });
+  // Read back node positions
+  enrichedNodes.forEach(n => {
+    const gn = g.node(n.id);
+    n.x = gn.x;
+    n.y = gn.y;
+  });
 
-    // Group by rank
-    const rankGroups = new Map();
-    this.nodes.forEach(n => {
-      const r = ranks.get(n.id);
-      if (!rankGroups.has(r)) rankGroups.set(r, []);
-      rankGroups.get(r).push(n);
-    });
-
-    // Position nodes
-    const sortedRanks = [...rankGroups.keys()].sort((a,b) => a - b);
-    let totalHeight = 0;
-
-    sortedRanks.forEach((rank, ri) => {
-      const group = rankGroups.get(rank);
-      const groupWidth = group.reduce((sum, n) => sum + n.width, 0) + (group.length - 1) * this.nodeSep;
-      let x = -groupWidth / 2;
-
-      group.forEach(n => {
-        n.x = x + n.width / 2;
-        n.y = ri * (n.height + this.rankSep);
-        x += n.width + this.nodeSep;
-      });
-
-      totalHeight = Math.max(totalHeight, ri * (group[0].height + this.rankSep) + group[0].height);
-    });
-
-    // Compute edge paths
-    this.edges.forEach(e => {
+  // Read back edge waypoints
+  edges.forEach(e => {
+    const ge = g.edge(e.source, e.target);
+    if (ge && ge.points) {
+      e.points = ge.points;
+    } else {
+      // Fallback: straight line between node centers
       const src = nodeMap.get(e.source);
       const tgt = nodeMap.get(e.target);
       if (src && tgt) {
         e.points = [
           {x: src.x, y: src.y + src.height / 2},
-          {x: (src.x + tgt.x) / 2, y: (src.y + src.height/2 + tgt.y - tgt.height/2) / 2},
           {x: tgt.x, y: tgt.y - tgt.height / 2}
         ];
       }
-    });
+    }
+  });
 
-    // Compute bounding box
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    this.nodes.forEach(n => {
-      minX = Math.min(minX, n.x - n.width/2);
-      maxX = Math.max(maxX, n.x + n.width/2);
-      minY = Math.min(minY, n.y - n.height/2);
-      maxY = Math.max(maxY, n.y + n.height/2);
-    });
+  const graph = g.graph();
+  return {
+    nodes: enrichedNodes,
+    edges: edges,
+    width: graph.width || 800,
+    height: graph.height || 600,
+    offsetX: 0,
+    offsetY: 0
+  };
+}
 
-    return {
-      nodes: this.nodes,
-      edges: this.edges,
-      width: maxX - minX + this.marginX * 2,
-      height: maxY - minY + this.marginY * 2,
-      offsetX: -minX + this.marginX,
-      offsetY: -minY + this.marginY
-    };
+// Minimal fallback layout when dagre CDN is unavailable
+function fallbackLayout(nodes, edges, opts) {
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const inDegree = new Map(nodes.map(n => [n.id, 0]));
+  const outEdges = new Map(nodes.map(n => [n.id, []]));
+
+  edges.forEach(e => {
+    inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+    outEdges.get(e.source)?.push(e.target);
+  });
+
+  const ranks = new Map();
+  const queue = [];
+  nodes.forEach(n => {
+    if ((inDegree.get(n.id) || 0) === 0) { queue.push(n.id); ranks.set(n.id, 0); }
+  });
+  if (queue.length === 0 && nodes.length > 0) { queue.push(nodes[0].id); ranks.set(nodes[0].id, 0); }
+
+  let maxRank = 0;
+  while (queue.length > 0) {
+    const nid = queue.shift();
+    const rank = ranks.get(nid);
+    maxRank = Math.max(maxRank, rank);
+    (outEdges.get(nid) || []).forEach(tid => {
+      const newRank = rank + 1;
+      if (!ranks.has(tid) || ranks.get(tid) < newRank) ranks.set(tid, newRank);
+      const deg = inDegree.get(tid) - 1;
+      inDegree.set(tid, deg);
+      if (deg <= 0 && !queue.includes(tid)) queue.push(tid);
+    });
   }
+  nodes.forEach(n => { if (!ranks.has(n.id)) ranks.set(n.id, maxRank + 1); });
+
+  const rankGroups = new Map();
+  nodes.forEach(n => {
+    const r = ranks.get(n.id);
+    if (!rankGroups.has(r)) rankGroups.set(r, []);
+    rankGroups.get(r).push(n);
+  });
+
+  [...rankGroups.keys()].sort((a,b) => a - b).forEach((rank, ri) => {
+    const group = rankGroups.get(rank);
+    const groupWidth = group.reduce((sum, n) => sum + n.width, 0) + (group.length - 1) * opts.nodeSep;
+    let x = -groupWidth / 2;
+    group.forEach(n => {
+      n.x = x + n.width / 2;
+      n.y = ri * (n.height + opts.rankSep);
+      x += n.width + opts.nodeSep;
+    });
+  });
+
+  edges.forEach(e => {
+    const src = nodeMap.get(e.source);
+    const tgt = nodeMap.get(e.target);
+    if (src && tgt) {
+      e.points = [
+        {x: src.x, y: src.y + src.height / 2},
+        {x: (src.x + tgt.x) / 2, y: (src.y + src.height/2 + tgt.y - tgt.height/2) / 2},
+        {x: tgt.x, y: tgt.y - tgt.height / 2}
+      ];
+    }
+  });
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    minX = Math.min(minX, n.x - n.width/2);
+    maxX = Math.max(maxX, n.x + n.width/2);
+    minY = Math.min(minY, n.y - n.height/2);
+    maxY = Math.max(maxY, n.y + n.height/2);
+  });
+
+  return {
+    nodes, edges,
+    width: maxX - minX + opts.marginX * 2,
+    height: maxY - minY + opts.marginY * 2,
+    offsetX: -minX + opts.marginX,
+    offsetY: -minY + opts.marginY
+  };
 }
 
 // ===== STATE =====
@@ -1195,12 +1258,12 @@ function renderGraph(skill) {
     return;
   }
 
-  const layout = new DagreLayout(nodes, edges, {
+  const layout = dagreLayout(nodes, edges, {
     nodeWidth: 220,
     nodeHeight: 80,
     rankSep: 100,
     nodeSep: 60
-  }).layout();
+  });
 
   // Build SVG
   const w = layout.width;
@@ -1226,7 +1289,7 @@ function renderGraph(skill) {
 
   svgContent += `<g id="graphGroup" transform="translate(${layout.offsetX}, ${layout.offsetY})">`;
 
-  // Edges
+  // Edges — build SVG path from dagre's multi-point waypoints
   layout.edges.forEach(e => {
     if (!e.points || e.points.length < 2) return;
     const p = e.points;
@@ -1234,12 +1297,38 @@ function renderGraph(skill) {
                        e.type === 'conditional' ? 'Conditional' :
                        e.type === 'chain' ? 'Chain' :
                        e.type === 'data_pass' ? 'DataPass' : 'Default';
-    const pathD = `M${p[0].x},${p[0].y} Q${p[1].x},${p[1].y} ${p[2].x},${p[2].y}`;
+
+    // Build path: M start, then cubic bezier spline through waypoints
+    let pathD;
+    if (p.length === 2) {
+      pathD = `M${p[0].x},${p[0].y} L${p[1].x},${p[1].y}`;
+    } else if (p.length === 3) {
+      pathD = `M${p[0].x},${p[0].y} Q${p[1].x},${p[1].y} ${p[2].x},${p[2].y}`;
+    } else {
+      // 4+ points: use cubic bezier with smooth continuation
+      pathD = `M${p[0].x},${p[0].y}`;
+      if (p.length === 4) {
+        pathD += ` C${p[1].x},${p[1].y} ${p[2].x},${p[2].y} ${p[3].x},${p[3].y}`;
+      } else {
+        // First cubic segment uses points 0-3
+        pathD += ` C${p[1].x},${p[1].y} ${p[2].x},${p[2].y} ${p[3].x},${p[3].y}`;
+        // Remaining points use smooth continuation (S)
+        for (let i = 4; i < p.length; i += 2) {
+          if (i + 1 < p.length) {
+            pathD += ` S${p[i].x},${p[i].y} ${p[i+1].x},${p[i+1].y}`;
+          } else {
+            pathD += ` L${p[i].x},${p[i].y}`;
+          }
+        }
+      }
+    }
+
     svgContent += `<path d="${pathD}" class="edge-path ${e.type || ''}" data-source="${e.source}" data-target="${e.target}" marker-end="url(#arrow${markerType})"/>`;
 
     if (e.label) {
-      const mx = p[1].x;
-      const my = p[1].y - 8;
+      const mid = p[Math.floor(p.length / 2)];
+      const mx = mid.x;
+      const my = mid.y - 8;
       const labelW = e.label.length * 5.5 + 10;
       svgContent += `<rect class="edge-label-bg" x="${mx - labelW/2}" y="${my - 7}" width="${labelW}" height="14"/>`;
       svgContent += `<text x="${mx}" y="${my}" class="edge-label">${esc(e.label)}</text>`;
@@ -1435,8 +1524,19 @@ function setupInteraction(svg, w, h) {
     e.preventDefault();
     const speed = getZoomSpeed();
     const base = e.deltaY > 0 ? -0.03 : 0.03;
-    const factor = 1 + base * speed;
-    transform.scale = Math.max(0.02, Math.min(50, transform.scale * factor));
+    const ratio = 1 + base * speed;
+    const newScale = Math.max(0.02, Math.min(50, transform.scale * ratio));
+    const r = newScale / transform.scale;
+
+    // Zoom toward mouse: adjust pan so SVG point under cursor stays fixed
+    const rect = svg.getBoundingClientRect();
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+    const w = originalViewBox.w;
+    const h = originalViewBox.h;
+    transform.x = transform.x * r + w * (r - 1) * (0.5 - fx);
+    transform.y = transform.y * r + h * (r - 1) * (0.5 - fy);
+    transform.scale = newScale;
     updateTransform();
   };
 }
@@ -1714,6 +1814,8 @@ class SimulationEngine {
     this._waitingForSelection = false;
     this._branchOptions = [];
     this._complete = false;
+    this._convergingFork = null;
+    this._independentForkCount = 0;
   }
 
   _findEntryNode() {
@@ -1741,6 +1843,19 @@ class SimulationEngine {
   _isFork(id) { return this._getNodeType(id) === 'fork'; }
   _isJoin(id) { return this._getNodeType(id) === 'join'; }
 
+  _findJoinForBranch(startId) {
+    const visited = new Set();
+    const queue = [startId];
+    while (queue.length) {
+      const nid = queue.shift();
+      if (visited.has(nid)) continue;
+      visited.add(nid);
+      if (this._isJoin(nid)) return nid;
+      this._outgoing(nid).forEach(e => queue.push(e.target));
+    }
+    return null;
+  }
+
   _activateNodes(ids) {
     this._active = ids;
     if (ids.length === 1 && this._isDecisionNode(ids[0])) {
@@ -1755,46 +1870,140 @@ class SimulationEngine {
     this._visited = [];
     this._waitingForSelection = false;
     this._branchOptions = [];
+    this._convergingFork = null;
+    this._independentForkCount = 0;
     const entry = this._findEntryNode();
     if (entry) this._activateNodes([entry]);
     else this._active = [];
   }
 
+  _stepConverging() {
+    const cf = this._convergingFork;
+    const branch = cf.branches[cf.currentBranchIndex];
+
+    const allSuccessors = [];
+    for (const nodeId of this._active) {
+      if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+      const out = this._outgoing(nodeId);
+      out.forEach(e => { if (!allSuccessors.includes(e.target)) allSuccessors.push(e.target); });
+    }
+
+    const joinId = cf.joinId;
+    const reachedJoin = allSuccessors.includes(joinId);
+    const nonJoinSuccessors = allSuccessors.filter(s => s !== joinId);
+
+    if (reachedJoin && !nonJoinSuccessors.length) {
+      cf.arrivedAtJoin.push(branch[0]);
+      cf.currentBranchIndex++;
+
+      if (cf.currentBranchIndex >= cf.branches.length) {
+        this._convergingFork = null;
+        this._activateNodes([joinId]);
+      } else {
+        const nextBranch = cf.branches[cf.currentBranchIndex];
+        this._activateNodes([nextBranch[0]]);
+      }
+    } else if (nonJoinSuccessors.length) {
+      this._activateNodes(nonJoinSuccessors);
+    } else {
+      cf.arrivedAtJoin.push(branch[0]);
+      cf.currentBranchIndex++;
+      if (cf.currentBranchIndex >= cf.branches.length) {
+        this._convergingFork = null;
+        this._activateNodes([joinId]);
+      } else {
+        const nextBranch = cf.branches[cf.currentBranchIndex];
+        this._activateNodes([nextBranch[0]]);
+      }
+    }
+  }
+
   step() {
     if (this._complete || !this._active.length || this._waitingForSelection) return;
 
-    const nodeId = this._active[0];
-    const remaining = this._active.slice(1);
-    const out = this._outgoing(nodeId);
+    this._independentForkCount = 0;
 
-    if (!out.length) {
-      if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
-      if (!remaining.length) { this._complete = true; this._active = []; }
-      else this._active = remaining;
+    // Case 1: Inside a converging fork playback
+    if (this._convergingFork !== null) {
+      this._stepConverging();
       return;
     }
 
-    if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+    // Case 2 & 3: Normal processing
+    const allSuccessors = [];
 
-    let successors = [];
-    if (this._isFork(nodeId)) {
-      out.forEach(e => { if (!successors.includes(e.target)) successors.push(e.target); });
-    } else {
-      out.forEach(e => {
-        if (this._isJoin(e.target)) {
-          const inc = this._incoming(e.target);
-          if (inc.every(ie => this._visited.includes(ie.source)) && !successors.includes(e.target)) {
-            successors.push(e.target);
+    for (const nodeId of this._active) {
+      if (!this._visited.includes(nodeId)) this._visited.push(nodeId);
+
+      const out = this._outgoing(nodeId);
+      if (!out.length) continue;
+
+      if (this._isFork(nodeId)) {
+        const branchTargets = [];
+        out.forEach(e => {
+          if (!branchTargets.some(bt => bt[0] === e.target)) {
+            const joinId = this._findJoinForBranch(e.target);
+            branchTargets.push([e.target, joinId]);
           }
-        } else {
-          if (!successors.includes(e.target)) successors.push(e.target);
+        });
+
+        const converging = {};
+        const independent = [];
+        branchTargets.forEach(([target, joinId]) => {
+          if (joinId !== null) {
+            if (!converging[joinId]) converging[joinId] = [];
+            converging[joinId].push(target);
+          } else {
+            independent.push(target);
+          }
+        });
+
+        let convGroup = null, convJoin = null;
+        for (const [jid, branches] of Object.entries(converging)) {
+          if (branches.length >= 2) {
+            convGroup = branches;
+            convJoin = jid;
+            break;
+          } else {
+            independent.push(...branches);
+          }
         }
-      });
+
+        if (convGroup) {
+          this._convergingFork = {
+            forkId: nodeId,
+            joinId: convJoin,
+            branches: convGroup.map(b => [b]),
+            currentBranchIndex: 0,
+            arrivedAtJoin: [],
+          };
+          const activate = [convGroup[0], ...independent];
+          if (independent.length) this._independentForkCount = independent.length;
+          this._activateNodes(activate);
+        } else {
+          this._independentForkCount = independent.length;
+          independent.forEach(target => {
+            if (!allSuccessors.includes(target)) allSuccessors.push(target);
+          });
+        }
+      } else {
+        out.forEach(e => {
+          if (this._isJoin(e.target)) {
+            const inc = this._incoming(e.target);
+            if (inc.every(ie => this._visited.includes(ie.source)) && !allSuccessors.includes(e.target)) {
+              allSuccessors.push(e.target);
+            }
+          } else {
+            if (!allSuccessors.includes(e.target)) allSuccessors.push(e.target);
+          }
+        });
+      }
     }
 
-    const newActive = successors.concat(remaining);
-    if (!newActive.length) { this._complete = true; this._active = []; }
-    else this._activateNodes(newActive);
+    if (this._convergingFork !== null) return;
+
+    if (!allSuccessors.length) { this._complete = true; this._active = []; }
+    else this._activateNodes(allSuccessors);
   }
 
   selectBranch(index) {
@@ -1813,6 +2022,8 @@ class SimulationEngine {
     this._waitingForSelection = false;
     this._branchOptions = [];
     this._complete = false;
+    this._convergingFork = null;
+    this._independentForkCount = 0;
   }
 
   isComplete() { return this._complete; }
@@ -1823,6 +2034,8 @@ class SimulationEngine {
       visited: [...this._visited],
       waitingForSelection: this._waitingForSelection,
       branchOptions: [...this._branchOptions],
+      convergingFork: this._convergingFork ? {...this._convergingFork} : null,
+      independentForkCount: this._independentForkCount,
     };
   }
 }
@@ -1892,6 +2105,7 @@ function simReset() {
   simApplyState();
   simUpdateStatus('Reset — press play or step');
   document.getElementById('branchOverlay').classList.remove('visible');
+  document.getElementById('simSnackbar').classList.remove('visible');
 }
 
 function simApplyState() {
@@ -1904,10 +2118,12 @@ function simApplyState() {
   // Apply CSS classes to SVG nodes
   document.querySelectorAll('.node-group').forEach(g => {
     const id = g.dataset.id;
-    g.classList.remove('sim-active', 'sim-visited', 'sim-unvisited');
-    if (state.active.length === 0 && state.visited.length === 0) return; // not started
+    g.classList.remove('sim-active', 'sim-visited', 'sim-unvisited', 'sim-waiting');
+    if (state.active.length === 0 && state.visited.length === 0) return;
     if (state.active.includes(id)) {
       g.classList.add('sim-active');
+    } else if (state.convergingFork && id === state.convergingFork.joinId && state.convergingFork.arrivedAtJoin.length > 0) {
+      g.classList.add('sim-waiting');
     } else if (state.visited.includes(id)) {
       g.classList.add('sim-visited');
     } else {
@@ -1946,6 +2162,15 @@ function simApplyState() {
     overlay.classList.remove('visible');
   }
 
+  // Snackbar for independent fork
+  const snackbar = document.getElementById('simSnackbar');
+  if (state.independentForkCount > 0) {
+    snackbar.textContent = `\u2442 ${state.independentForkCount} parallel branches activated`;
+    snackbar.classList.add('visible');
+  } else if (state.active.length <= 1 || state.convergingFork) {
+    snackbar.classList.remove('visible');
+  }
+
   // Auto-pan to active nodes
   if (state.active.length > 0) {
     smoothPanToActiveNodes(state.active);
@@ -1954,6 +2179,11 @@ function simApplyState() {
   // Status
   if (simEngine.isComplete()) {
     simUpdateStatus('Simulation complete');
+    snackbar.classList.remove('visible');
+  } else if (state.convergingFork) {
+    const cf = state.convergingFork;
+    const branchNode = state.active[0] || '';
+    simUpdateStatus(`\u2442 Branch ${cf.currentBranchIndex + 1}/${cf.branches.length} \u2014 ${branchNode}`);
   } else if (!state.waitingForSelection) {
     const activeNames = state.active.join(', ');
     simUpdateStatus(activeNames ? `Active: ${activeNames}` : 'Ready');
