@@ -33,13 +33,7 @@ Check the user's request for `--advance` or `advance` flag.
 Find where this skill's supporting files are installed:
 
 ```bash
-SKILL_DIR=$(dirname "$(find ~/.claude/skills ~/.claude/plugins -path '*/check-my-skills/SKILL.md' -type f 2>/dev/null | head -1)")
-```
-
-If not found in the plugin cache, check the current working directory:
-
-```bash
-[ -z "$SKILL_DIR" ] && SKILL_DIR=$(find "$(pwd)" -path '*/skills/check-my-skills/SKILL.md' -type f -exec dirname {} \; 2>/dev/null | head -1)
+SKILL_DIR=$(find "$(pwd)" ~/.agents/skills -path '*/check-my-skills/SKILL.md' -type f 2>/dev/null -exec dirname {} \; | head -1)
 ```
 
 ### Ensure Dependencies
@@ -61,14 +55,11 @@ python3 -c "import anthropic" 2>/dev/null || pip3 install --user "anthropic>=0.2
 Scan for all skill directories. Search these locations in order:
 
 ```bash
-# User-level skills
-find ~/.claude/skills -name "SKILL.md" -type f 2>/dev/null
-
 # Project skills (current working directory)
 find "$(pwd)" -name "SKILL.md" -path "*/skills/*" -type f 2>/dev/null
 
-# Cloud environments (Koyeb, etc.)
-find /mnt/skills/user -name "SKILL.md" -type f 2>/dev/null
+# User-level skills
+find ~/.agents/skills -name "SKILL.md" -type f 2>/dev/null
 
 # Also check if user specified a specific path
 # e.g., "check my skills in /path/to/project"
@@ -218,8 +209,8 @@ pip3 install --user "PyYAML>=6.0"
 
 **SKILL_DIR not resolved (skill directory not found):**
 - The skill may not be installed. Ask the user to clone the repo and copy it:
-  `cp -r skill-inspector/skills/check-my-skills ~/.claude/skills/`
-- Or fall back to running from a local checkout of the repo.
+  `cp -r skill-inspector/skills/check-my-skills your-project/skills/`
+- Or run from a local checkout of the repo (Claude discovers it in `./skills/`).
 
 **Advance mode — API key not set:**
 ```bash

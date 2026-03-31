@@ -19,23 +19,24 @@ Skill Inspector makes the invisible visible:
 
 ## Install as a Claude Code Skill
 
-Clone the repo and copy the skill into your project's `skills/` directory:
+The skill folder (`skills/check-my-skills/`) is fully self-contained — it includes the SKILL.md, all reference docs, and the report generator script. No pip install needed.
+
+**Option A — Add to a project** (recommended):
 
 ```bash
 git clone https://github.com/tonyfadel23/skill-inspector.git
-cp -r skill-inspector/skills/check-my-skills /your-project/skills/
+cp -r skill-inspector/skills/check-my-skills your-project/skills/
 ```
 
-Or install it as a user-level skill (available in all projects):
+**Option B — Clone and run from the repo:**
 
 ```bash
 git clone https://github.com/tonyfadel23/skill-inspector.git
-cp -r skill-inspector/skills/check-my-skills ~/.claude/skills/
+cd skill-inspector
+# Claude will discover the skill in ./skills/check-my-skills/
 ```
 
-Then in any Claude Code session, say **"check my skills"** or **"skill inspector"** to scan and visualize your SKILL.md files.
-
-> **Note:** The `.claude-plugin/` directory contains forward-looking plugin manifests for a future Claude Code plugin registry. For now, use the manual install above.
+Then say **"check my skills"** or **"skill inspector"** in Claude Code.
 
 ## Quick Start (Standalone)
 
