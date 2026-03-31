@@ -13,4 +13,4 @@ Initial public release.
 - Interactive HTML report with pan/zoom, step-through simulation, minimap, and dark/light mode
 - Fork-aware simulation engine (converging and independent forks)
 - Advance mode with LLM-powered parsing via Anthropic API
-- Packaged as a Claude Code plugin (`claude plugin add github:tonyfadel23/skill-inspector`)
+- Installable as a Claude Code skill (copy `skills/check-my-skills/` into your project)

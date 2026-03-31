@@ -4,7 +4,6 @@ Parse, visualize, and audit SKILL.md agent instruction files as interactive dire
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-green)](https://python.org)
-[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-purple)](https://github.com/tonyfadel23/skill-inspector)
 [![Tests](https://github.com/tonyfadel23/skill-inspector/actions/workflows/tests.yml/badge.svg)](https://github.com/tonyfadel23/skill-inspector/actions/workflows/tests.yml)
 
 ## Why Skill Inspector?
@@ -18,13 +17,25 @@ Skill Inspector makes the invisible visible:
 - **Score quality** — 15 best-practice checks with a 1-10 score so you know where to focus
 - **Two modes** — Fast heuristic parsing offline, or LLM-powered deep analysis via the Anthropic API
 
-## Install as Claude Code Plugin
+## Install as a Claude Code Skill
+
+Clone the repo and copy the skill into your project:
 
 ```bash
-claude plugin add github:tonyfadel23/skill-inspector
+git clone https://github.com/tonyfadel23/skill-inspector.git
+cp -r skill-inspector/skills/check-my-skills /your-project/.claude/skills/
+```
+
+Or install it as a user-level skill (available in all projects):
+
+```bash
+git clone https://github.com/tonyfadel23/skill-inspector.git
+cp -r skill-inspector/skills/check-my-skills ~/.claude/skills/
 ```
 
 Then in any Claude Code session, say **"check my skills"** or **"skill inspector"** to scan and visualize your SKILL.md files.
+
+> **Note:** The `.claude-plugin/` directory contains forward-looking plugin manifests for a future Claude Code plugin registry. For now, use the manual install above.
 
 ## Quick Start (Standalone)
 
@@ -133,7 +144,7 @@ See `skills/check-my-skills/references/quality-checks.md` for the full evaluatio
 
 ```
 skill-inspector/
-  .claude-plugin/            # Plugin manifests
+  .claude-plugin/            # Plugin manifests (forward-looking)
     plugin.json
     marketplace.json
   skills/

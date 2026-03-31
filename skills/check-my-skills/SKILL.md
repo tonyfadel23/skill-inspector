@@ -214,9 +214,9 @@ python3 --version
 pip3 install --user "PyYAML>=6.0"
 ```
 
-**SKILL_DIR not resolved (plugin directory not found):**
-- The plugin may not be installed yet. Ask the user to run:
-  `claude plugin add github:tonyfadel23/skill-inspector`
+**SKILL_DIR not resolved (skill directory not found):**
+- The skill may not be installed. Ask the user to clone the repo and copy it:
+  `cp -r skill-inspector/skills/check-my-skills ~/.claude/skills/`
 - Or fall back to running from a local checkout of the repo.
 
 **Advance mode — API key not set:**
