@@ -2,15 +2,26 @@
 
 Parse, visualize, and audit SKILL.md agent instruction files as interactive directed acyclic graphs (DAGs).
 
-Skill Inspector scans a folder of SKILL.md files, extracts the instruction flow (nodes, edges, phases, control structures), runs quality checks, and generates a self-contained interactive HTML report with pan/zoom, simulation, light/dark mode, and structural diagnostics.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-green)](https://python.org)
+[![Claude Code Plugin](https://img.shields.io/badge/Claude%20Code-plugin-purple)](https://github.com/tonyfadel23/skill-inspector)
+[![Tests](https://github.com/tonyfadel23/skill-inspector/actions/workflows/tests.yml/badge.svg)](https://github.com/tonyfadel23/skill-inspector/actions/workflows/tests.yml)
 
-![Dark mode](https://img.shields.io/badge/theme-dark%20%2F%20light-blue)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-green)
+## Why Skill Inspector?
+
+SKILL.md files are the instruction layer for Claude Code skills — they define how agents think, branch, loop, and act. As skills grow in complexity, it becomes hard to reason about what's actually happening: Are there dead-end paths? Forks without joins? Vague instructions that will confuse the model?
+
+Skill Inspector makes the invisible visible:
+
+- **See the flow** — Every skill becomes an interactive DAG you can pan, zoom, and step through
+- **Catch structural bugs** — Orphan nodes, missing joins, unreachable branches — found automatically
+- **Score quality** — 15 best-practice checks with a 1-10 score so you know where to focus
+- **Two modes** — Fast heuristic parsing offline, or LLM-powered deep analysis via the Anthropic API
 
 ## Install as Claude Code Plugin
 
 ```bash
-claude plugin add github:tonyfadel/skill-inspector
+claude plugin add github:tonyfadel23/skill-inspector
 ```
 
 Then in any Claude Code session, say **"check my skills"** or **"skill inspector"** to scan and visualize your SKILL.md files.
@@ -19,7 +30,7 @@ Then in any Claude Code session, say **"check my skills"** or **"skill inspector
 
 ```bash
 # Clone
-git clone https://github.com/tonyfadel/skill-inspector.git
+git clone https://github.com/tonyfadel23/skill-inspector.git
 cd skill-inspector
 
 # Install dependencies (only PyYAML, optional)

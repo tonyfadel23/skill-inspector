@@ -198,6 +198,44 @@ Present the HTML file to the user.
 
 ---
 
+## Troubleshooting
+
+If something goes wrong during execution, check these common issues:
+
+**Python not found or wrong version:**
+```bash
+python3 --version
+# Requires 3.10+. If missing, install via brew/apt/pyenv.
+```
+
+**PyYAML import fails after install:**
+```bash
+# Try with --user flag if pip install fails
+pip3 install --user "PyYAML>=6.0"
+```
+
+**SKILL_DIR not resolved (plugin directory not found):**
+- The plugin may not be installed yet. Ask the user to run:
+  `claude plugin add github:tonyfadel23/skill-inspector`
+- Or fall back to running from a local checkout of the repo.
+
+**Advance mode — API key not set:**
+```bash
+# Must be set before running advance mode
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+If the key is missing, fall back to standard mode and inform the user.
+
+**build_report.py fails with JSON error:**
+- Verify the JSON piped to `--input` is valid. Use `python3 -m json.tool < /tmp/skills_graph.json` to check.
+- Ensure the JSON follows the expected schema (see Step 5).
+
+**No SKILL.md files found:**
+- Confirm the search paths exist and contain SKILL.md files.
+- Check if the user meant a different directory — ask them to specify.
+
+---
+
 ## Step 6 — Debrief
 
 After presenting the report, summarize:

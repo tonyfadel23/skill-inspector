@@ -5,6 +5,8 @@
   "author": {
     "name": "Tony Fadel"
   },
+  "homepage": "https://github.com/tonyfadel23/skill-inspector",
+  "repository": "https://github.com/tonyfadel23/skill-inspector",
   "license": "MIT",
   "keywords": [
     "skill-inspector",
