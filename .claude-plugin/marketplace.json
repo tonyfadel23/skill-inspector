@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "skill-inspector",
+  "description": "Parse, visualize, and audit SKILL.md files as interactive DAGs",
+  "owner": {
+    "name": "Tony Fadel"
+  },
+  "plugins": [
+    {
+      "name": "check-my-skills",
+      "description": "Scan, parse, and visualize the instruction flow of every skill in a project",
+      "version": "0.1.0",
+      "source": "."
+    }
+  ]
+}

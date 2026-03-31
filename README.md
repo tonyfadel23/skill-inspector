@@ -7,7 +7,15 @@ Skill Inspector scans a folder of SKILL.md files, extracts the instruction flow 
 ![Dark mode](https://img.shields.io/badge/theme-dark%20%2F%20light-blue)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-green)
 
-## Quick Start
+## Install as Claude Code Plugin
+
+```bash
+claude plugin add github:tonyfadel/skill-inspector
+```
+
+Then in any Claude Code session, say **"check my skills"** or **"skill inspector"** to scan and visualize your SKILL.md files.
+
+## Quick Start (Standalone)
 
 ```bash
 # Clone
@@ -22,7 +30,7 @@ python3 -c "
 from skill_inspector.parser import parse_skill_folder
 import json
 print(json.dumps(parse_skill_folder('/path/to/your/skills/')))
-" | python3 build_report.py -o report.html
+" | python3 skills/check-my-skills/scripts/build_report.py -o report.html
 
 # Open
 open report.html
@@ -51,7 +59,7 @@ python3 -c "
 from skill_inspector.parser import parse_skill_folder
 import json
 print(json.dumps(parse_skill_folder('./skills/')))
-" | python3 build_report.py -o report.html
+" | python3 skills/check-my-skills/scripts/build_report.py -o report.html
 ```
 
 ### Advance Mode
@@ -63,7 +71,7 @@ Requires an `ANTHROPIC_API_KEY` environment variable:
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-See `SKILL.md` for the full advance mode workflow and `llm-prompt.md` for the system prompt sent to the API.
+See `skills/check-my-skills/SKILL.md` for the full advance mode workflow and `skills/check-my-skills/references/llm-prompt.md` for the system prompt sent to the API.
 
 ## Interactive Report Features
 
@@ -108,40 +116,35 @@ Each skill gets a score from 1.0 to 10.0 based on structural checks:
 - **Warnings** (-0.75 each): Missing error handling, unbounded loops, unclear gates
 - **Info** (-0.25 each): Style suggestions, naming improvements
 
-See `quality-checks.md` for the full evaluation framework.
+See `skills/check-my-skills/references/quality-checks.md` for the full evaluation framework.
 
 ## Project Structure
 
 ```
 skill-inspector/
-  build_report.py          # HTML report generator (standalone template)
-  skill-inspector.html     # Sample generated report
-  SKILL.md                 # Skill definition (for use as a Claude skill)
-  llm-prompt.md            # System prompt for advance mode
-  parsing-rules.md         # Heuristic parsing specification
-  quality-checks.md        # Quality evaluation criteria
-  requirements.txt         # Python dependencies
-
-  skill_inspector/         # Python package
+  .claude-plugin/            # Plugin manifests
+    plugin.json
+    marketplace.json
+  skills/
+    check-my-skills/
+      SKILL.md               # Skill definition
+      references/
+        parsing-rules.md     # Heuristic parsing specification
+        quality-checks.md    # Quality evaluation criteria
+        llm-prompt.md        # System prompt for advance mode
+      scripts/
+        build_report.py      # HTML report generator
+  skill_inspector/           # Python package (for programmatic use)
     __init__.py
-    parser.py              # 4-pass heuristic DAG parser
-    best_practices.py      # BP1-BP15 quality checks
-    patches.py             # Structural issue detection + LLM integration
-    simulation.py          # DAG traversal simulation engine
-
-  test/                    # Test suite
+    parser.py                # 4-pass heuristic DAG parser
+    best_practices.py        # BP1-BP15 quality checks
+    patches.py               # Structural issue detection
+    simulation.py            # DAG traversal simulation engine
+  test/                      # Test suite
     test_best_practices.py
     test_patches.py
     test_simulation.py
 ```
-
-## Using as a Claude Skill
-
-Skill Inspector is itself a SKILL.md — you can install it as a Claude Code skill:
-
-1. Copy the `skill-inspector/` folder into your project's `.claude/skills/` directory
-2. Say "check my skills" or "skill inspector" to Claude
-3. Claude will scan your skills, parse them, and generate the interactive report
 
 ## Running Tests
 

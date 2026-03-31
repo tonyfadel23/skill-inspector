@@ -23,7 +23,8 @@ env/
 .DS_Store
 Thumbs.db
 
-# Generated reports (keep the sample)
+# Generated reports
+*.html
 /tmp/
 
 # Environment

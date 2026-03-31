@@ -22,11 +22,37 @@ instruction chain. Two modes:
 
 ---
 
-## Step 0 — Detect Mode
+## Step 0 — Setup
 
+### Detect Mode
 Check the user's request for `--advance` or `advance` flag.
 - If present → set `MODE=advance`
 - If absent → set `MODE=standard`
+
+### Locate Plugin Directory
+Find where this skill's supporting files are installed:
+
+```bash
+SKILL_DIR=$(dirname "$(find ~/.claude/plugins -path '*/check-my-skills/SKILL.md' -type f 2>/dev/null | head -1)")
+```
+
+If not found in the plugin cache, check the current working directory:
+
+```bash
+[ -z "$SKILL_DIR" ] && SKILL_DIR=$(find "$(pwd)" -path '*/skills/check-my-skills/SKILL.md' -type f -exec dirname {} \; 2>/dev/null | head -1)
+```
+
+### Ensure Dependencies
+
+```bash
+python3 -c "import yaml" 2>/dev/null || pip3 install --user "PyYAML>=6.0"
+```
+
+If advance mode, also ensure:
+
+```bash
+python3 -c "import anthropic" 2>/dev/null || pip3 install --user "anthropic>=0.25.0"
+```
 
 ---
 
@@ -155,16 +181,18 @@ Collect all parsed skill graphs into a single JSON structure:
 }
 ```
 
-Run the report generator script:
+Run the report generator script (using the plugin directory found in Step 0):
 
 ```bash
-cd /path/to/check-my-skills
-python3 scripts/build_report.py --input /tmp/skills_graph.json --output /mnt/user-data/outputs/skill-inspector.html
+python3 "$SKILL_DIR/scripts/build_report.py" --input /tmp/skills_graph.json --output skill-inspector.html
 ```
 
-If the script is not available (e.g., running in claude.ai), generate the HTML
-directly by reading `templates/viewer.html` as the shell and injecting the JSON
-data into the `SKILLS_DATA` placeholder.
+If `$SKILL_DIR` is not set (e.g., running outside Claude Code), the user can
+run the script directly from the repo checkout:
+
+```bash
+python3 skills/check-my-skills/scripts/build_report.py --input /tmp/skills_graph.json --output skill-inspector.html
+```
 
 Present the HTML file to the user.
 
@@ -187,4 +215,3 @@ After presenting the report, summarize:
 - `references/quality-checks.md` — Quality evaluation criteria and scoring
 - `references/llm-prompt.md` — Structured prompt for advance mode API calls
 - `scripts/build_report.py` — HTML report generator
-- `templates/viewer.html` — HTML visualization shell (fallback if script unavailable)
