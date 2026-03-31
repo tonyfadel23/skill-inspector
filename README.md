@@ -19,11 +19,11 @@ Skill Inspector makes the invisible visible:
 
 ## Install as a Claude Code Skill
 
-Clone the repo and copy the skill into your project:
+Clone the repo and copy the skill into your project's `skills/` directory:
 
 ```bash
 git clone https://github.com/tonyfadel23/skill-inspector.git
-cp -r skill-inspector/skills/check-my-skills /your-project/.claude/skills/
+cp -r skill-inspector/skills/check-my-skills /your-project/skills/
 ```
 
 Or install it as a user-level skill (available in all projects):

@@ -29,7 +29,7 @@ Check the user's request for `--advance` or `advance` flag.
 - If present → set `MODE=advance`
 - If absent → set `MODE=standard`
 
-### Locate Plugin Directory
+### Locate Skill Directory
 Find where this skill's supporting files are installed:
 
 ```bash
@@ -61,12 +61,14 @@ python3 -c "import anthropic" 2>/dev/null || pip3 install --user "anthropic>=0.2
 Scan for all skill directories. Search these locations in order:
 
 ```bash
-# User skills (highest priority)
-find /mnt/skills/user -name "SKILL.md" -type f 2>/dev/null
+# User-level skills
+find ~/.claude/skills -name "SKILL.md" -type f 2>/dev/null
 
 # Project skills (current working directory)
 find "$(pwd)" -name "SKILL.md" -path "*/skills/*" -type f 2>/dev/null
-find "$(pwd)" -name "SKILL.md" -path "*/.claude/skills/*" -type f 2>/dev/null
+
+# Cloud environments (Koyeb, etc.)
+find /mnt/skills/user -name "SKILL.md" -type f 2>/dev/null
 
 # Also check if user specified a specific path
 # e.g., "check my skills in /path/to/project"
