@@ -33,7 +33,7 @@ Check the user's request for `--advance` or `advance` flag.
 Find where this skill's supporting files are installed:
 
 ```bash
-SKILL_DIR=$(dirname "$(find ~/.claude/plugins -path '*/check-my-skills/SKILL.md' -type f 2>/dev/null | head -1)")
+SKILL_DIR=$(dirname "$(find ~/.claude/skills ~/.claude/plugins -path '*/check-my-skills/SKILL.md' -type f 2>/dev/null | head -1)")
 ```
 
 If not found in the plugin cache, check the current working directory:
