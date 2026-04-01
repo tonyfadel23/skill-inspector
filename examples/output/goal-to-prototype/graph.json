@@ -1,0 +1,509 @@
+{
+  "name": "goal-to-prototype",
+  "description": "Transform a high-level goal into a validated prototype with market research, multi-angle analysis, and iterative refinement. Use when the user says \"build me a prototype\", \"turn this idea into reality\", \"goal to prototype\", \"validate this concept\", or \"research and build\".",
+  "pattern": "parallel-fan-out-fan-in",
+  "phases": [
+    "Step 0 \u2014 Context Loading",
+    "Step 1 \u2014 Data Acquisition",
+    "Step 2 \u2014 Signal Evaluation",
+    "Step 3 \u2014 Multi-Angle Analysis",
+    "Step 4 \u2014 Synthesis",
+    "Step 5 \u2014 Prototype Generation",
+    "Step 6 \u2014 Final Review"
+  ],
+  "nodes": [
+    {
+      "id": "load-user-context",
+      "label": "Load user personas and company profile",
+      "type": "context_loader",
+      "raw_instruction": "Load user personas and company profile",
+      "inputs": [
+        "references/personas.md",
+        "references/company-profile.md"
+      ],
+      "urls": [],
+      "phase": "Step 0 \u2014 Context Loading",
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "load-market-context",
+      "label": "Load market landscape and competitive intel",
+      "type": "context_loader",
+      "raw_instruction": "Load market landscape and competitive intel",
+      "inputs": [
+        "references/market-landscape.md"
+      ],
+      "urls": [
+        "https://api.example.com/market-data"
+      ],
+      "phase": "Step 0 \u2014 Context Loading",
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "parse-goal",
+      "label": "Parse the user's goal statement into structured requirements: target audience, problem space, desired outcome, success metrics, and constraints",
+      "type": "executor",
+      "raw_instruction": "Parse the user's goal statement into structured requirements: target audience, problem space, desired outcome, success metrics, and constraints",
+      "phase": "Step 0 \u2014 Context Loading",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "research-fan-out_fork",
+      "label": "Launch parallel research agents to gather data simultaneously",
+      "type": "fork",
+      "raw_instruction": "Launch parallel research agents to gather data simultaneously",
+      "phase": "Step 1 \u2014 Data Acquisition",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "web-research",
+      "label": "Web Research Agent",
+      "type": "executor",
+      "raw_instruction": "Search the web for recent articles, papers, and discussions related to the problem space. Fetch at least 10 high-quality sources. Use WebSearch and WebFetch tools.",
+      "phase": "Step 1 \u2014 Data Acquisition",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "competitor-analysis",
+      "label": "Competitor Analysis Agent",
+      "type": "executor",
+      "raw_instruction": "Identify top 5-10 competitors in the space. For each, analyze: product offering, pricing, strengths, weaknesses, market share. Use WebSearch to find competitor data.",
+      "phase": "Step 1 \u2014 Data Acquisition",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "user-research",
+      "label": "User Research Agent",
+      "type": "executor",
+      "raw_instruction": "Cross-reference the loaded personas against the problem space. Identify pain points, unmet needs, willingness to pay, and adoption barriers. Load references/personas.md for context.",
+      "phase": "Step 1 \u2014 Data Acquisition",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "trend-analysis",
+      "label": "Market Trend Agent",
+      "type": "executor",
+      "raw_instruction": "Analyze market trends, growth trajectories, regulatory changes, and technology shifts that could impact the opportunity. Use WebSearch for current data.",
+      "phase": "Step 1 \u2014 Data Acquisition",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "merge-research",
+      "label": "Synthesize all research outputs into a unified intelligence brief",
+      "type": "join",
+      "raw_instruction": "Synthesize all research outputs into a unified intelligence brief",
+      "strategy": "weighted-merge",
+      "phase": "Step 2 \u2014 Signal Evaluation",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "compute-signals",
+      "label": "Compute signal quality metrics from the merged research:\n- **market_signal**: strength of market opportunity (0-1)\n- **competitive_gap**: size of unserved niche (0-1)\n- **user_demand**: evidence of user pull (0-1)\n- **feasibility**: technical buildability (0-1)\n- **confidence**: data quality and coverage (0-1)",
+      "type": "executor",
+      "raw_instruction": "Compute signal quality metrics from the merged research:\n- **market_signal**: strength of market opportunity (0-1)\n- **competitive_gap**: size of unserved niche (0-1)\n- **user_demand**: evidence of user pull (0-1)\n- **feasibility**: technical buildability (0-1)\n- **confidence**: data quality and coverage (0-1)",
+      "phase": "Step 2 \u2014 Signal Evaluation",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "signal-quality-gate",
+      "label": "Verify signal strength before investing in deep analysis",
+      "type": "signal_gate",
+      "raw_instruction": "Verify signal strength before investing in deep analysis",
+      "criteria": {
+        "confidence": ">= 0.6",
+        "market_signal": ">= 0.5",
+        "user_demand": ">= 0.4"
+      },
+      "on_fail": "retry",
+      "max_retries": 3,
+      "fail_target": null,
+      "phase": "Step 2 \u2014 Signal Evaluation",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "perspective-analysis_fork",
+      "label": "Analyze the opportunity from multiple angles in parallel",
+      "type": "fork",
+      "raw_instruction": "Analyze the opportunity from multiple angles in parallel",
+      "phase": "Step 3 \u2014 Multi-Angle Analysis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "technical-feasibility",
+      "label": "Technical Feasibility Assessment",
+      "type": "executor",
+      "raw_instruction": "Evaluate: tech stack options, build complexity, infrastructure needs, MVP scope, time-to-prototype. Score feasibility 0-1.",
+      "phase": "Step 3 \u2014 Multi-Angle Analysis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "market-viability",
+      "label": "Market Viability Assessment",
+      "type": "executor",
+      "raw_instruction": "Evaluate: TAM/SAM/SOM, go-to-market strategy, pricing model, distribution channels, competitive moat. Score viability 0-1.",
+      "phase": "Step 3 \u2014 Multi-Angle Analysis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "user-desirability",
+      "label": "User Desirability Assessment",
+      "type": "executor",
+      "raw_instruction": "Evaluate: user journey, pain-point alignment, switching cost, value proposition clarity, retention hooks. Score desirability 0-1.",
+      "phase": "Step 3 \u2014 Multi-Angle Analysis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "synthesize-perspectives",
+      "label": "Converge all perspective assessments into a unified opportunity score",
+      "type": "join",
+      "raw_instruction": "Converge all perspective assessments into a unified opportunity score",
+      "strategy": "weighted-merge",
+      "phase": "Step 4 \u2014 Synthesis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "opportunity-gate",
+      "label": "Gate on overall opportunity quality before prototyping",
+      "type": "signal_gate",
+      "raw_instruction": "Gate on overall opportunity quality before prototyping",
+      "criteria": {
+        "opportunity_score": ">= 0.7",
+        "feasibility": ">= 0.6"
+      },
+      "on_fail": "branch",
+      "max_retries": 3,
+      "fail_target": "deep-research-loop",
+      "phase": "Step 4 \u2014 Synthesis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "generate-brief",
+      "label": "Generate a structured product brief with: problem statement, target user, value proposition, key features, success metrics, risks, and mitigations",
+      "type": "executor",
+      "raw_instruction": "Generate a structured product brief with: problem statement, target user, value proposition, key features, success metrics, risks, and mitigations",
+      "phase": "Step 4 \u2014 Synthesis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "deep-research-loop",
+      "label": "Apply RALPH methodology to strengthen weak signals",
+      "type": "improvement_loop",
+      "raw_instruction": "Apply RALPH methodology to strengthen weak signals",
+      "strategy": "ralph",
+      "max_iterations": 5,
+      "exit_criteria": {
+        "opportunity_score": ">= 0.7",
+        "confidence": ">= 0.8"
+      },
+      "steps": [
+        "Reflect on which signals are weak and why",
+        "Analyze gaps in the research \u2014 what data is missing?",
+        "Learn from competitor approaches \u2014 what are they doing right?",
+        "Plan targeted research to fill specific gaps",
+        "Hypothesize an improved positioning and re-score"
+      ],
+      "phase": "Step 4 \u2014 Synthesis",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "write-prd",
+      "label": "Generate the Product Requirements Document",
+      "type": "file_io",
+      "raw_instruction": "Generate the Product Requirements Document",
+      "inputs": [],
+      "outputs": [
+        "output/prd.md"
+      ],
+      "phase": "Step 5 \u2014 Prototype Generation",
+      "warnings": []
+    },
+    {
+      "id": "wireframe-agent",
+      "label": "Generate low-fidelity wireframes for the core user flows",
+      "type": "subagent",
+      "raw_instruction": "Generate low-fidelity wireframes for the core user flows",
+      "agent_type": "general-purpose",
+      "tools": [
+        "Write"
+      ],
+      "context_files": [
+        "output/prd.md"
+      ],
+      "phase": "Step 5 \u2014 Prototype Generation",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "implementation-agent",
+      "label": "Generate the implementation plan with architecture, tech stack, milestones, and sprint breakdown",
+      "type": "subagent",
+      "raw_instruction": "Generate the implementation plan with architecture, tech stack, milestones, and sprint breakdown",
+      "agent_type": "general-purpose",
+      "tools": [
+        "Write",
+        "Read"
+      ],
+      "context_files": [
+        "output/prd.md"
+      ],
+      "phase": "Step 5 \u2014 Prototype Generation",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "quality-loop",
+      "label": "Iteratively improve prototype quality",
+      "type": "improvement_loop",
+      "raw_instruction": "Iteratively improve prototype quality",
+      "strategy": "ralph",
+      "max_iterations": 3,
+      "exit_criteria": {
+        "completeness": ">= 0.9",
+        "coherence": ">= 0.9"
+      },
+      "steps": [
+        "Reflect on prototype completeness \u2014 are all requirements covered?",
+        "Analyze coherence \u2014 do PRD, wireframes, and plan align?",
+        "Learn from quality gaps \u2014 what's missing or contradictory?",
+        "Plan specific fixes for each gap",
+        "Hypothesize the improved version and verify"
+      ],
+      "phase": "Step 6 \u2014 Final Review",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "final-review",
+      "label": "Present the complete prototype package to the user for review and approval",
+      "type": "gate",
+      "raw_instruction": "Present the complete prototype package to the user for review and approval",
+      "phase": "Step 6 \u2014 Final Review",
+      "inputs": [],
+      "outputs": [],
+      "warnings": []
+    },
+    {
+      "id": "deliver-package",
+      "label": "Save the final deliverables",
+      "type": "file_io",
+      "raw_instruction": "Save the final deliverables",
+      "inputs": [],
+      "outputs": [
+        "output/prd.md",
+        "output/wireframes.md",
+        "output/implementation-plan.md",
+        "output/research-brief.md"
+      ],
+      "phase": "Step 6 \u2014 Final Review",
+      "warnings": []
+    }
+  ],
+  "edges": [
+    {
+      "source": "research-fan-out_fork",
+      "target": "web-research",
+      "type": "parallel",
+      "label": ""
+    },
+    {
+      "source": "research-fan-out_fork",
+      "target": "competitor-analysis",
+      "type": "parallel",
+      "label": ""
+    },
+    {
+      "source": "research-fan-out_fork",
+      "target": "user-research",
+      "type": "parallel",
+      "label": ""
+    },
+    {
+      "source": "research-fan-out_fork",
+      "target": "trend-analysis",
+      "type": "parallel",
+      "label": ""
+    },
+    {
+      "source": "perspective-analysis_fork",
+      "target": "technical-feasibility",
+      "type": "parallel",
+      "label": ""
+    },
+    {
+      "source": "perspective-analysis_fork",
+      "target": "market-viability",
+      "type": "parallel",
+      "label": ""
+    },
+    {
+      "source": "perspective-analysis_fork",
+      "target": "user-desirability",
+      "type": "parallel",
+      "label": ""
+    },
+    {
+      "source": "load-user-context",
+      "target": "load-market-context",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "load-market-context",
+      "target": "parse-goal",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "merge-research",
+      "target": "compute-signals",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "compute-signals",
+      "target": "signal-quality-gate",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "synthesize-perspectives",
+      "target": "opportunity-gate",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "generate-brief",
+      "target": "deep-research-loop",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "write-prd",
+      "target": "wireframe-agent",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "wireframe-agent",
+      "target": "implementation-agent",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "quality-loop",
+      "target": "final-review",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "final-review",
+      "target": "deliver-package",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "parse-goal",
+      "target": "research-fan-out_fork",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "research-fan-out_fork",
+      "target": "merge-research",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "signal-quality-gate",
+      "target": "perspective-analysis_fork",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "perspective-analysis_fork",
+      "target": "synthesize-perspectives",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "deep-research-loop",
+      "target": "write-prd",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "implementation-agent",
+      "target": "quality-loop",
+      "type": "sequential",
+      "label": ""
+    },
+    {
+      "source": "opportunity-gate",
+      "target": "generate-brief",
+      "type": "conditional",
+      "label": "pass"
+    },
+    {
+      "source": "opportunity-gate",
+      "target": "deep-research-loop",
+      "type": "conditional",
+      "label": "fail"
+    }
+  ],
+  "dependencies": {
+    "mcp_servers": [],
+    "files": [
+      "output/implementation-plan.md",
+      "output/prd.md",
+      "output/research-brief.md",
+      "output/wireframes.md",
+      "references/company-profile.md",
+      "references/market-landscape.md",
+      "references/personas.md"
+    ],
+    "skills": [],
+    "tools": [
+      "Read",
+      "Write"
+    ]
+  }
+}
