@@ -75,6 +75,8 @@ def parse_skill(skill_path: str) -> dict:
             "summary": f"{len(nodes)} nodes, {len(edges)} edges. {len(patches)} structural issues.",
             "top_issues": [p["message"] for p in patches[:5]],
         },
+        "_frontmatter_raw": frontmatter,
+        "_body_raw": body,
     }
 
 
@@ -189,8 +191,10 @@ def _extract_nodes(sections, nodes, edges):
             continue
 
         # Join detection
-        if _match_any(text, [r"read all", r"synthesize", r"merge", r"converge",
-                             r"combine results", r"when all complete"]):
+        if (_match_any(text, [r"read all", r"synthesize", r"merge", r"converge",
+                              r"combine results", r"when all complete",
+                              r"run after all.*exist"]) or
+                re.search(r"\b(CONVERGE|SYNTHESIS|MERGE)\b", title)):
             nid = _slugify(title) + "_join"
             nodes.append(_make_node(nid, title, "join", phase, text))
             continue
@@ -235,13 +239,16 @@ def _extract_nodes(sections, nodes, edges):
 
         # Validator detection
         if _match_any(text, [r"check every.*gate", r"fix failures", r"do not pass",
-                             r"reviewer", r"verify", r"validate"]):
+                             r"reviewer:", r"reviewer\b", r"verify", r"validate",
+                             r"all gates pass"]):
             nid = _slugify(title)
             nodes.append(_make_node(nid, title, "validator", phase, text))
             continue
 
-        # Template detection
-        if _match_any(text, [r"template", r"format as"]):
+        # Template detection — match "## X Template" headers and code fences with markdown
+        if (re.search(r"template\s*$", title, re.IGNORECASE) or
+                _match_any(text, [r"template", r"format as"]) or
+                _has_markdown_template(content)):
             nid = _slugify(title)
             nodes.append(_make_node(nid, title, "template", phase, text))
             continue
@@ -363,16 +370,46 @@ def _infer_edges(nodes, edges):
                                   "type": "data_pass", "label": os.path.basename(inp)})
 
 
+def _has_markdown_template(content: str) -> bool:
+    """Detect code fences containing markdown structure (headers, tables)."""
+    in_fence = False
+    has_md_headers = False
+    for line in content.splitlines():
+        if line.strip().startswith("```"):
+            if in_fence:
+                if has_md_headers:
+                    return True
+                in_fence = False
+                has_md_headers = False
+            else:
+                in_fence = True
+        elif in_fence and re.match(r"^#{1,3}\s+", line):
+            has_md_headers = True
+    return False
+
+
 def _ensure_entry_exit(nodes, edges):
     """Pass 4: ensure graph has entry and exit nodes."""
     if not nodes:
         return
 
-    # Check if there's already a clear entry (no incoming edges)
     targets = {e["target"] for e in edges}
-    has_entry = any(n["id"] not in targets for n in nodes)
-    if not has_entry and nodes:
-        nodes[0]["type"] = "file_io"
+    sources = {e["source"] for e in edges}
+
+    # Synthesize entry node if no node lacks incoming edges
+    entry_nodes = [n for n in nodes if n["id"] not in targets]
+    if not entry_nodes:
+        entry = _make_node("__entry__", "Receive Input", "file_io", "Entry", "Skill entry point")
+        nodes.insert(0, entry)
+        edges.insert(0, {"source": "__entry__", "target": nodes[1]["id"], "type": "sequential", "label": ""})
+
+    # Synthesize exit node if no node lacks outgoing edges (excluding terminal types)
+    terminal_types = {"gate", "spawn"}
+    exit_nodes = [n for n in nodes if n["id"] not in sources and n["type"] not in terminal_types]
+    if not exit_nodes:
+        exit_node = _make_node("__exit__", "Deliver Output", "gate", "Delivery", "Skill exit point")
+        nodes.append(exit_node)
+        edges.append({"source": nodes[-2]["id"], "target": "__exit__", "type": "sequential", "label": ""})
 
 
 def _detect_pattern(nodes, edges):
@@ -391,10 +428,15 @@ def _detect_pattern(nodes, edges):
     return "sequential"
 
 
-def parse_skill_folder(folder_path: str) -> dict:
-    """Parse all SKILL.md files in a folder tree."""
+def parse_skill_folder(folder_path: str, mode: str = "advance") -> dict:
+    """Parse all SKILL.md files in a folder tree.
+
+    Args:
+        folder_path: Root directory to scan for SKILL.md files.
+        mode: Parsing mode — "advance" (LLM, default) or "standard" (heuristic).
+    """
     skills = []
-    for root, dirs, files in os.walk(folder_path):
+    for root, dirs, files in os.walk(folder_path, followlinks=True):
         for f in files:
             if f == "SKILL.md":
                 path = os.path.join(root, f)
@@ -405,6 +447,6 @@ def parse_skill_folder(folder_path: str) -> dict:
                     print(f"Warning: failed to parse {path}: {e}")
     return {
         "generated_at": __import__("datetime").datetime.now().isoformat(),
-        "mode": "standard",
+        "mode": mode,
         "skills": skills,
     }

@@ -3,10 +3,10 @@
 Run every check against each parsed skill graph. Each check produces a
 severity level and a message. Aggregate into a 1-10 quality score.
 
-> **Implementation status:** The Python package (`skill_inspector/`) currently
-> implements S1-S3, SP1, and BP1-BP15. The remaining structural (S4-S6),
-> data flow (D1-D4), clarity (C1-C7), and orchestration (O1-O5) checks are
-> spec'd here for advance mode (LLM-powered) or future implementation.
+> **Implementation status:** The Python package (`skill_inspector/`) implements
+> S1-S6, SP1, D1-D4, O5, and BP1-BP15. The remaining clarity (C1-C7) and
+> orchestration (O1-O4) checks are best handled by LLM mode (default) or
+> spec'd here for future heuristic implementation.
 
 ---
 

@@ -9,7 +9,7 @@
     {
       "name": "check-my-skills",
       "description": "Scan, parse, and visualize the instruction flow of every skill in a project",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "."
     }
   ]

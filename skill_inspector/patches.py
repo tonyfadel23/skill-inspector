@@ -23,7 +23,11 @@ def suggest_patches(nodes, edges):
     patches.extend(_check_orphan_nodes(nodes, edges))
     patches.extend(_check_dead_ends(nodes, edges))
     patches.extend(_check_fork_without_join(nodes, edges))
+    patches.extend(_check_join_without_fork(nodes, edges))
+    patches.extend(_check_unreachable(nodes, edges))
+    patches.extend(_check_cycles(nodes, edges))
     patches.extend(_check_parallel_dependencies(nodes, edges))
+    patches.extend(_check_depth_complexity(nodes, edges))
     return patches
 
 
@@ -196,3 +200,188 @@ def _check_parallel_dependencies(nodes, edges):
                 })
 
     return patches
+
+
+def _check_join_without_fork(nodes, edges):
+    """S4 — Every join node should have an upstream fork."""
+    join_ids = [n["id"] for n in nodes if n.get("type") == "join"]
+    fork_ids = set(n["id"] for n in nodes if n.get("type") == "fork")
+
+    rev_adj = {}
+    for e in edges:
+        rev_adj.setdefault(e["target"], []).append(e["source"])
+
+    patches = []
+    for jid in join_ids:
+        visited = set()
+        queue = [jid]
+        found_fork = False
+        while queue:
+            current = queue.pop(0)
+            if current in visited:
+                continue
+            visited.add(current)
+            if current in fork_ids and current != jid:
+                found_fork = True
+                break
+            for neighbor in rev_adj.get(current, []):
+                queue.append(neighbor)
+
+        if not found_fork:
+            label = _node_label(nodes, jid)
+            phase = _node_phase(nodes, jid)
+            patches.append({
+                "check_id": "S4",
+                "severity": "warning",
+                "message": f"Join node '{label}' has no upstream fork — may be synthesizing from sequential steps (intentional?).",
+                "location": f"Phase \"{phase}\", node \"{label}\"" if phase else f"Node \"{label}\"",
+                "suggestion": (
+                    f"If '{label}' is collecting outputs from parallel work, add an "
+                    f"upstream fork node. If it's synthesizing sequential outputs, "
+                    f"consider changing its type to 'executor'."
+                ),
+            })
+
+    return patches
+
+
+def _check_unreachable(nodes, edges):
+    """S5 — Every node must be reachable from the entry node."""
+    if not nodes:
+        return []
+
+    targets = {e["target"] for e in edges}
+    entry_id = None
+    for n in nodes:
+        if n["id"] not in targets:
+            entry_id = n["id"]
+            break
+    if entry_id is None:
+        return []
+
+    adj = {}
+    for e in edges:
+        adj.setdefault(e["source"], []).append(e["target"])
+
+    visited = set()
+    queue = [entry_id]
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        for neighbor in adj.get(current, []):
+            queue.append(neighbor)
+
+    patches = []
+    for n in nodes:
+        if n["id"] not in visited:
+            label = n.get("label", n["id"])
+            phase = n.get("phase", "")
+            patches.append({
+                "check_id": "S5",
+                "severity": "error",
+                "message": f"Node '{label}' is unreachable from the skill entry point.",
+                "location": f"Phase \"{phase}\", node \"{label}\"" if phase else f"Node \"{label}\"",
+                "suggestion": (
+                    f"Connect '{label}' to the main flow by adding an edge from "
+                    f"an upstream node, or remove it if it's unused."
+                ),
+            })
+
+    return patches
+
+
+def _check_cycles(nodes, edges):
+    """S6 — The graph should be acyclic. Exempt validator->executor retry loops."""
+    adj = {}
+    for e in edges:
+        adj.setdefault(e["source"], []).append(e["target"])
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {n["id"]: WHITE for n in nodes}
+    patches = []
+    cycle_pairs = set()
+
+    def dfs(nid, path):
+        color[nid] = GRAY
+        for neighbor in adj.get(nid, []):
+            if neighbor in path:
+                src_type = _node_type(nodes, nid)
+                tgt_type = _node_type(nodes, neighbor)
+                if src_type == "validator" and tgt_type == "executor":
+                    continue
+                pair = (nid, neighbor)
+                if pair not in cycle_pairs:
+                    cycle_pairs.add(pair)
+                    src_label = _node_label(nodes, nid)
+                    tgt_label = _node_label(nodes, neighbor)
+                    patches.append({
+                        "check_id": "S6",
+                        "severity": "error",
+                        "message": f"Cycle detected: '{src_label}' -> '{tgt_label}' -> ... -> '{src_label}'.",
+                        "location": f"Node \"{src_label}\"",
+                        "suggestion": (
+                            f"Break the cycle by removing the edge from '{src_label}' to "
+                            f"'{tgt_label}', or restructure into a bounded retry with "
+                            f"a validator node."
+                        ),
+                    })
+            elif color.get(neighbor, WHITE) == WHITE:
+                dfs(neighbor, path | {nid})
+        color[nid] = BLACK
+
+    for n in nodes:
+        if color.get(n["id"], WHITE) == WHITE:
+            dfs(n["id"], set())
+
+    return patches
+
+
+def _check_depth_complexity(nodes, edges):
+    """O5 — Flag skills where the longest path exceeds 12 nodes."""
+    if not nodes:
+        return []
+
+    adj = {}
+    for e in edges:
+        adj.setdefault(e["source"], []).append(e["target"])
+
+    targets = {e["target"] for e in edges}
+    entry_id = None
+    for n in nodes:
+        if n["id"] not in targets:
+            entry_id = n["id"]
+            break
+    if entry_id is None:
+        return []
+
+    memo = {}
+
+    def longest_from(nid, visited):
+        if nid in memo:
+            return memo[nid]
+        if nid in visited:
+            return 0
+        best = 0
+        for neighbor in adj.get(nid, []):
+            best = max(best, 1 + longest_from(neighbor, visited | {nid}))
+        memo[nid] = best
+        return best
+
+    depth = 1 + longest_from(entry_id, set())
+
+    if depth > 12:
+        return [{
+            "check_id": "O5",
+            "severity": "info",
+            "message": f"Skill has {depth} steps in the longest path — consider simplifying or splitting.",
+            "location": "Whole graph",
+            "suggestion": (
+                f"The longest execution path is {depth} nodes deep. Consider "
+                f"breaking the skill into smaller composable skills chained via "
+                f"spawn nodes, or collapsing sequential steps that could run as one."
+            ),
+        }]
+
+    return []

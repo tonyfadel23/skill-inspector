@@ -5,7 +5,7 @@ description: >
   Use whenever a user says "check my skills", "audit my skills", "what are my skills doing",
   "show me the skill graph", "skill inspector", "debug my skill", or wants to understand
   how their SKILL.md files actually propagate instructions. Also triggers on
-  "check-my-skills" or "--advance" flags. Produces an interactive HTML report with
+  "check-my-skills" or "--easy" flags. Produces an interactive HTML report with
   Dagre DAG trees showing agent orchestration, tool calls, control flow, and quality warnings.
 ---
 
@@ -17,17 +17,17 @@ Parse every skill in a project into a directed acyclic graph (DAG) of instructio
 visualize the flow as an interactive Dagre tree, and surface quality issues in the
 instruction chain. Two modes:
 
-- **Standard** (default): Heuristic parsing — fast, no API calls
-- **Advanced** (`--advance`): LLM-powered parsing via Anthropic API — deeper, catches nuance
+- **Advanced** (default): LLM-powered parsing via Anthropic API — deeper, catches nuance
+- **Standard** (`--easy`): Heuristic parsing — fast, no API calls, works offline
 
 ---
 
 ## Step 0 — Setup
 
 ### Detect Mode
-Check the user's request for `--advance` or `advance` flag.
-- If present → set `MODE=advance`
-- If absent → set `MODE=standard`
+Check the user's request for `--easy` or `easy` flag.
+- If present → set `MODE=standard`
+- If absent → set `MODE=advance`
 
 ### Locate Skill Directory
 Find where this skill's supporting files are installed:
@@ -40,13 +40,12 @@ SKILL_DIR=$(find "$(pwd)" ~/.agents/skills -path '*/check-my-skills/SKILL.md' -t
 
 ```bash
 python3 -c "import yaml" 2>/dev/null || pip3 install --user "PyYAML>=6.0"
-```
-
-If advance mode, also ensure:
-
-```bash
 python3 -c "import anthropic" 2>/dev/null || pip3 install --user "anthropic>=0.25.0"
 ```
+
+If the Anthropic SDK install fails or `ANTHROPIC_API_KEY` is not set, fall back
+to standard mode automatically and inform the user. Or the user can explicitly
+use `--easy` to skip the API entirely.
 
 ---
 
@@ -212,12 +211,13 @@ pip3 install --user "PyYAML>=6.0"
   `cp -r skill-inspector/skills/check-my-skills your-project/skills/`
 - Or run from a local checkout of the repo (Claude discovers it in `./skills/`).
 
-**Advance mode — API key not set:**
+**API key not set (LLM mode is the default):**
 ```bash
-# Must be set before running advance mode
+# Required for default LLM mode
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
-If the key is missing, fall back to standard mode and inform the user.
+If the key is missing, the system falls back to heuristic mode automatically.
+To skip LLM mode entirely, use `--easy`.
 
 **build_report.py fails with JSON error:**
 - Verify the JSON piped to `--input` is valid. Use `python3 -m json.tool < /tmp/skills_graph.json` to check.

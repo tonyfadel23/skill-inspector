@@ -15,7 +15,7 @@ Skill Inspector makes the invisible visible:
 - **See the flow** — Every skill becomes an interactive DAG you can pan, zoom, and step through
 - **Catch structural bugs** — Orphan nodes, missing joins, unreachable branches — found automatically
 - **Score quality** — 15 best-practice checks with a 1-10 score so you know where to focus
-- **Two modes** — Fast heuristic parsing offline, or LLM-powered deep analysis via the Anthropic API
+- **Two modes** — LLM-powered deep analysis by default, or fast heuristic parsing offline with `--easy`
 
 ## Install as a Claude Code Skill
 
@@ -41,19 +41,17 @@ Then say **"check my skills"** or **"skill inspector"** in Claude Code.
 ## Quick Start (Standalone)
 
 ```bash
-# Clone
+# Clone and install
 git clone https://github.com/tonyfadel23/skill-inspector.git
 cd skill-inspector
+pip install .
 
-# Install dependencies (only PyYAML, optional)
-pip install -r requirements.txt
+# Run (LLM mode — requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=sk-ant-...
+python3 -m skill_inspector /path/to/your/skills/ --output report.html
 
-# Parse skills and generate report
-python3 -c "
-from skill_inspector.parser import parse_skill_folder
-import json
-print(json.dumps(parse_skill_folder('/path/to/your/skills/')))
-" | python3 skills/check-my-skills/scripts/build_report.py -o report.html
+# Or run in heuristic mode (no API key needed)
+python3 -m skill_inspector /path/to/your/skills/ --easy --output report.html
 
 # Open
 open report.html
@@ -74,27 +72,23 @@ Given a folder tree containing SKILL.md files, Skill Inspector:
 
 ## Modes
 
-### Standard Mode (default)
-Heuristic parsing — fast, no API calls, works offline.
-
-```bash
-python3 -c "
-from skill_inspector.parser import parse_skill_folder
-import json
-print(json.dumps(parse_skill_folder('./skills/')))
-" | python3 skills/check-my-skills/scripts/build_report.py -o report.html
-```
-
-### Advance Mode
+### LLM Mode (default)
 LLM-powered parsing via Anthropic API for deeper, nuance-aware analysis.
-
 Requires an `ANTHROPIC_API_KEY` environment variable:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
+python3 -m skill_inspector ./skills/
 ```
 
-See `skills/check-my-skills/SKILL.md` for the full advance mode workflow and `skills/check-my-skills/references/llm-prompt.md` for the system prompt sent to the API.
+If the API key is missing, falls back to heuristic mode automatically.
+
+### Heuristic Mode (`--easy`)
+Fast heuristic parsing — no API calls, works offline.
+
+```bash
+python3 -m skill_inspector ./skills/ --easy
+```
 
 ## Interactive Report Features
 
@@ -178,8 +172,8 @@ python3 -m pytest test/ -v
 ## Requirements
 
 - Python 3.10+
-- PyYAML (optional — falls back to simple key:value parsing without it)
-- Anthropic API key (only for advance mode)
+- PyYAML
+- Anthropic SDK (for default LLM mode; `--easy` mode works without it)
 
 ## License
 
